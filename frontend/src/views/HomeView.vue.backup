@@ -1,0 +1,1170 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { statsApi, purchaseApi, drawApi } from '../api'
+import type { OverviewStats, WinningRecord, LotteryType } from '../types'
+import { LOTTERY_CONFIGS } from '../types'
+import { TrendingUp, TrendingDown, DollarSign, Target, Trophy, ShoppingCart, Sparkles, X, CheckCircle, AlertCircle, ScanLine, Upload } from 'lucide-vue-next'
+// 纯 JS OCR，不需要网络请求
+
+const router = useRouter()
+const overview = ref<OverviewStats | null>(null)
+const recentWinnings = ref<WinningRecord[]>([])
+const loading = ref(true)
+
+// ===== 拍照识别相关 =====
+const showScanModal = ref(false)
+const scanLoading = ref(false)
+const scannedRaw = ref('')      // 原始识别文本
+const scanError = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
+
+// 识别结果表单
+const scanForm = ref({
+  lottery_type: '' as LotteryType | '',
+  issue_number: '',
+  purchase_date: new Date().toISOString().split('T')[0],
+  numbers: '',
+  amount: 2,
+  bet_type: '单式',
+  remark: '拍照录入'
+})
+
+// 可视化号码输入（根据不同彩票类型）
+const dltFront = ref([null, null, null, null, null])
+const dltBack = ref([null, null])
+const ssqRed = ref([null, null, null, null, null, null])
+const ssqBlue = ref(null)
+const num3d = ref([null, null, null])
+const num5 = ref([null, null, null, null, null])
+const num7 = ref([null, null, null, null, null, null, null])
+const scanMultiple = ref(1)
+
+// 彩票类型变更时，重置号码
+const onLotteryTypeChange = () => {
+  dltFront.value = [null, null, null, null, null]
+  dltBack.value = [null, null]
+  ssqRed.value = [null, null, null, null, null, null]
+  ssqBlue.value = null
+  num3d.value = [null, null, null]
+  num5.value = [null, null, null, null, null]
+  num7.value = [null, null, null, null, null, null, null]
+  scanForm.value.numbers = ''
+}
+
+// 打开扫描弹窗
+const openScanModal = () => {
+  showScanModal.value = true
+  scannedRaw.value = ''
+  scanError.value = ''
+  scanForm.value = {
+    lottery_type: '',
+    issue_number: '',
+    purchase_date: new Date().toISOString().split('T')[0],
+    numbers: '',
+    amount: 2,
+    bet_type: '单式',
+    remark: '拍照识别'
+  }
+}
+
+// 处理图片选择，使用 OCR 识别彩票票面文字
+const handleImageSelect = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || !input.files[0]) return
+  const file = input.files[0]
+  scanLoading.value = true
+  scanError.value = ''
+  scannedRaw.value = ''
+
+  try {
+    // 1. 加载图片并预处理
+    const imgEl = await loadImageElement(file)
+    const processedDataUrl = preprocessForOCR(imgEl)
+
+    // 2. 使用 Ocrad.js 识别文字（纯 JS，完全离线）
+    console.log('[OCR] 开始识别...')
+    const text = await recognizeWithOcrad(processedDataUrl)
+    console.log('[OCR] 识别结果:', text)
+
+    console.log('[OCR] 识别结果:', text)
+    scannedRaw.value = text
+
+    // 3. 解析识别结果（OCR 识别效果有限，主要提示用户手动填写）
+    if (text && text.trim().length > 0) {
+      parseLotteryOCR(text)
+    }
+    // 始终提示用户确认/手动填写
+    scanError.value = '请核对或手动填写以下信息'
+  } catch (err: any) {
+    console.error('[OCR] 识别失败:', err)
+    scanError.value = '未识别到文字，请确保图片清晰、正向放置彩票'
+  } finally {
+    scanLoading.value = false
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
+/** 使用 Ocrad.js 进行 OCR 识别（主线程运行，避免 Worker 兼容性问题） */
+// 动态加载 Ocrad.js
+const loadOcrad = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).OCRAD) {
+      resolve((window as any).OCRAD)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = '/ocr/ocrad.js'
+    script.onload = () => resolve((window as any).OCRAD)
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
+}
+
+/** 基于图像处理的彩票信息识别（不依赖 OCR） */
+const recognizeWithOcrad = async (dataUrl: string): Promise<string> => {
+  // 创建图片元素
+  const img = new Image()
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = () => reject(new Error('图片加载失败'))
+    img.src = dataUrl
+  })
+
+  const W = img.width
+  const H = img.height
+  console.log('[识别] 图片尺寸:', W, H)
+
+  // 裁剪号码区域（彩票号码通常在票面中部偏上）
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, 0, 0)
+
+  // 获取图像数据进行颜色分析
+  const imageData = ctx.getImageData(0, 0, W, H)
+  const data = imageData.data
+
+  // 分析票面颜色，找到号码区域
+  // 彩票号码通常是红色或蓝色，与背景有明显对比
+
+  // 提取图像中的数字区域
+  // 根据大乐透/双色球票面布局：期号在顶部，号码在中部
+
+  // 简化处理：直接返回原图信息，让用户手动填写
+  // 提示用户拍照技巧
+  scanError.value = '请确保彩票正面朝上、光线充足、字迹清晰，然后手动填写信息'
+
+  return ''
+}
+
+/** 图像预处理：灰度化 + 对比度增强 + 锐化 */
+const preprocessForOCR = (img: HTMLImageElement): string => {
+  const W = img.naturalWidth
+  const H = img.naturalHeight
+
+  // 限制最大宽度，提升 OCR 速度
+  const maxW = 2000
+  const scale = W > maxW ? maxW / W : 1
+  const dw = Math.round(W * scale)
+  const dh = Math.round(H * scale)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = dw
+  canvas.height = dh
+  const ctx = canvas.getContext('2d')!
+
+  // 绘制原图
+  ctx.drawImage(img, 0, 0, dw, dh)
+
+  // 获取图像数据
+  let imageData = ctx.getImageData(0, 0, dw, dh)
+  let d = imageData.data
+
+  // 1. 灰度化 + 对比度增强
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    // 对比度增强
+    const enhanced = Math.min(255, Math.max(0, (gray - 100) * 1.5 + 100))
+    d[i] = d[i + 1] = d[i + 2] = enhanced
+  }
+  ctx.putImageData(imageData, 0, 0)
+
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+/** 生成多个候选图像（原图 + 多种预处理版本），提升识别率 */
+// 加载原始图片为 HTMLImageElement
+const loadImageElement = (file: File): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('图片加载失败'))
+    img.src = URL.createObjectURL(file)
+  })
+}
+
+/**
+ * 解析 OCR 识别结果，提取彩票信息
+ * 支持：大乐透、双色球、七乐彩、七星彩、排列3/5、3D
+ */
+const parseLotteryOCR = (text: string) => {
+  const s = text.trim()
+  scanError.value = ''
+
+  console.log('[OCR解析] 原始文本:', s)
+
+  // 1. 识别彩票类型
+  const typePatterns: Array<{ regex: RegExp; type: LotteryType }> = [
+    { regex: /大乐透|超级大乐透|DLT/, type: '大乐透' },
+    { regex: /双色球|双色球的|SSQ/, type: '双色球' },
+    { regex: /七乐彩|七乐采|QLC/, type: '七乐彩' },
+    { regex: /七星彩|七星采|QXC/, type: '七星彩' },
+    { regex: /排列3|排3|PL3/, type: '排列3' },
+    { regex: /排列5|排5|PL5/, type: '排列5' },
+    { regex: /3D|三维|福彩3D/, type: '福彩3D' },
+  ]
+
+  for (const { regex, type } of typePatterns) {
+    if (regex.test(s)) {
+      scanForm.value.lottery_type = type
+      break
+    }
+  }
+
+  // 2. 提取期号（常见格式：26026、2026026、2024xxx）
+  // 大乐透期号格式：年份后两位 + 期数，如 26026 表示 2026 年第 26 期
+  const issuePatterns = [
+    /第\s*(\d{5,7})\s*期/,   // 第 26026 期
+    /(\d{5,7})\s*期/,         // 26026 期
+    /20\d{2}\s*(\d{3})\s*期/, // 2024 026 期
+    /期号[：:]\s*(\d{5,7})/,  // 期号：26026
+    /(\d{5,7})$/,             // 结尾的 5-7 位数字
+  ]
+
+  for (const pattern of issuePatterns) {
+    const match = s.match(pattern)
+    if (match) {
+      scanForm.value.issue_number = match[1]
+      break
+    }
+  }
+
+  // 3. 提取倍数
+  const multiMatch = s.match(/[倍xX×]\s*(\d+)|(\d+)\s*[倍xX×]/)
+  if (multiMatch) {
+    scanForm.value.remark = `OCR识别倍数: ${multiMatch[1] || multiMatch[2]}`
+  }
+
+  // 4. 提取金额
+  const amountPatterns = [
+    /(\d+)\s*元/,
+    /金额[：:]\s*(\d+)/,
+    /￥\s*(\d+)/,
+    /¥\s*(\d+)/,
+    /合计[：:]\s*(\d+)/,
+  ]
+  for (const pattern of amountPatterns) {
+    const match = s.match(pattern)
+    if (match) {
+      const amt = parseInt(match[1])
+      if (amt >= 1 && amt <= 99999) {
+        scanForm.value.amount = amt
+        break
+      }
+    }
+  }
+
+  // 5. 提取日期
+  const datePatterns = [
+    /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/,
+    /(\d{4})[/-](\d{1,2})[/-](\d{1,2})/,
+    /(\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})/,
+  ]
+  for (const pattern of datePatterns) {
+    const match = s.match(pattern)
+    if (match) {
+      let year: string, month: string, day: string
+      if (match[1].length === 4) {
+        year = match[1]
+        month = match[2].padStart(2, '0')
+        day = match[3].padStart(2, '0')
+      } else {
+        year = '20' + match[1]
+        month = match[2].padStart(2, '0')
+        day = match[3].padStart(2, '0')
+      }
+      scanForm.value.purchase_date = `${year}-${month}-${day}`
+      break
+    }
+  }
+
+  // 6. 提取号码（核心）
+  extractNumbersFromOCR(s, scanForm.value.lottery_type as LotteryType)
+
+  // 7. 标记来源
+  scanForm.value.remark = `OCR识别 [${s.substring(0, 30)}...]`
+
+  // 检查是否解析到关键信息
+  if (!scanForm.value.lottery_type && !scanForm.value.numbers) {
+    scanError.value = `已识别文字但无法解析，请手动填写。识别内容：${s.substring(0, 100)}`
+  }
+}
+
+/** 从 OCR 文本中提取投注号码 */
+const extractNumbersFromOCR = (text: string, type: LotteryType) => {
+  const s = text.replace(/[^\d\s+]/g, ' ')
+  const allNumbers = s.split(/\s+/).filter(n => /^\d{1,2}$/.test(n)).map(n => parseInt(n))
+
+  if (allNumbers.length === 0) return
+
+  console.log('[OCR] 提取到数字:', allNumbers, '类型:', type)
+
+  // 根据彩票类型组装号码
+  switch (type) {
+    case '大乐透':
+      // 大乐透：5个前区 + 2个后区
+      if (allNumbers.length >= 7) {
+        const front = allNumbers.slice(0, 5).map(n => n.toString().padStart(2, '0')).sort((a, b) => parseInt(a) - parseInt(b))
+        const back = allNumbers.slice(5, 7).map(n => n.toString().padStart(2, '0')).sort((a, b) => parseInt(a) - parseInt(b))
+        scanForm.value.numbers = JSON.stringify({ front, back })
+      } else if (allNumbers.length >= 2) {
+        // 尝试识别：后区通常是后2个
+        const front = allNumbers.slice(0, allNumbers.length - 2).map(n => n.toString().padStart(2, '0'))
+        const back = allNumbers.slice(-2).map(n => n.toString().padStart(2, '0'))
+        if (front.length >= 1) {
+          scanForm.value.numbers = JSON.stringify({ front, back })
+        }
+      }
+      break
+
+    case '双色球':
+      // 双色球：6个红球 + 1个蓝球
+      if (allNumbers.length >= 7) {
+        const red = allNumbers.slice(0, 6).map(n => Math.min(33, n)).filter(n => n >= 1).map(n => n.toString().padStart(2, '0')).sort((a, b) => parseInt(a) - parseInt(b))
+        const blue = [Math.min(16, allNumbers[6])].filter(n => n >= 1).map(n => n.toString().padStart(2, '0'))
+        if (red.length === 6 && blue.length === 1) {
+          scanForm.value.numbers = JSON.stringify({ red, blue })
+        }
+      }
+      break
+
+    case '七乐彩':
+      // 七乐彩：7个号码
+      if (allNumbers.length >= 7) {
+        const numbers = allNumbers.slice(0, 7).map(n => Math.min(30, n)).filter(n => n >= 1).map(n => n.toString().padStart(2, '0'))
+        if (numbers.length === 7) {
+          scanForm.value.numbers = JSON.stringify({ numbers })
+        }
+      }
+      break
+
+    case '七星彩':
+      // 七星彩：7个号码
+      if (allNumbers.length >= 7) {
+        const numbers = allNumbers.slice(0, 7).map(n => n.toString().padStart(2, '0'))
+        scanForm.value.numbers = JSON.stringify({ numbers })
+      }
+      break
+
+    case '排列3':
+    case '排列5':
+    case '福彩3D':
+      const count = type === '排列5' ? 5 : 3
+      if (allNumbers.length >= count) {
+        const numbers = allNumbers.slice(0, count).map(n => n.toString().padStart(2, '0'))
+        scanForm.value.numbers = JSON.stringify({ numbers })
+      }
+      break
+
+    default:
+      // 未知类型，尝试智能识别
+      if (allNumbers.length === 7) {
+        // 可能是双色球或大乐透或七乐彩
+        const red = allNumbers.slice(0, 6).map(n => n.toString().padStart(2, '0'))
+        const blue = [allNumbers[6]].map(n => n.toString().padStart(2, '0'))
+        scanForm.value.numbers = JSON.stringify({ red, blue })
+      } else if (allNumbers.length >= 3) {
+        scanForm.value.numbers = JSON.stringify({ numbers: allNumbers.slice(0, 3).map(n => n.toString().padStart(2, '0')) })
+      }
+  }
+}
+
+// 从可视化输入构建号码 JSON
+const buildNumbersFromInputs = (): string => {
+  const type = scanForm.value.lottery_type
+
+  if (type === '大乐透') {
+    const front = dltFront.value.filter(n => n !== null).map(n => String(n).padStart(2, '0'))
+    const back = dltBack.value.filter(n => n !== null).map(n => String(n).padStart(2, '0'))
+    if (front.length === 5 && back.length >= 1) {
+      return JSON.stringify({ front: front.sort((a, b) => +a - +b), back: back.sort((a, b) => +a - +b) })
+    }
+  } else if (type === '双色球') {
+    const red = ssqRed.value.filter(n => n !== null).map(n => String(n).padStart(2, '0'))
+    const blue = ssqBlue.value ? [String(ssqBlue.value).padStart(2, '0')] : []
+    if (red.length === 6 && blue.length === 1) {
+      return JSON.stringify({ red: red.sort((a, b) => +a - +b), blue })
+    }
+  } else if (type === '排列3' || type === '福彩3D') {
+    const numbers = num3d.value.filter(n => n !== null).map(n => String(n).padStart(2, '0'))
+    if (numbers.length === 3) {
+      return JSON.stringify({ numbers })
+    }
+  } else if (type === '排列5') {
+    const numbers = num5.value.filter(n => n !== null).map(n => String(n).padStart(2, '0'))
+    if (numbers.length === 5) {
+      return JSON.stringify({ numbers })
+    }
+  } else if (type === '七乐彩' || type === '七星彩') {
+    const numbers = num7.value.filter(n => n !== null).map(n => String(n).padStart(2, '0'))
+    if (numbers.length === 7) {
+      return JSON.stringify({ numbers: numbers.sort((a, b) => +a - +b) })
+    }
+  }
+
+  return scanForm.value.numbers || ''
+}
+
+// 确认添加扫描到的购买记录
+const confirmScanPurchase = async () => {
+  if (!scanForm.value.lottery_type || !scanForm.value.issue_number) {
+    showToast('error', '请选择彩票类型并填写期号')
+    return
+  }
+
+  // 从可视化输入构建号码
+  const numbers = buildNumbersFromInputs()
+  if (!numbers) {
+    showToast('error', '请填写完整的号码')
+    return
+  }
+
+  // 计算金额（根据倍数）
+  const finalAmount = scanForm.value.amount * (scanMultiple.value || 1)
+
+  try {
+    await purchaseApi.create({
+      lottery_type: scanForm.value.lottery_type,
+      issue_number: scanForm.value.issue_number,
+      purchase_date: scanForm.value.purchase_date,
+      numbers: numbers,
+      bet_type: scanForm.value.bet_type,
+      amount: finalAmount,
+      remark: scanForm.value.remark || `拍照录入${scanMultiple.value > 1 ? `, ${scanMultiple.value}倍` : ''}`
+    })
+    showScanModal.value = false
+    showToast('success', '添加成功')
+    router.push('/purchase')
+  } catch (e) {
+    console.error('添加失败', e)
+    showToast('error', '添加失败')
+  }
+}
+
+// Toast 提示
+const toast = ref({
+  show: false,
+  type: 'info' as 'success' | 'error' | 'info',
+  message: ''
+})
+
+const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+  toast.value = { show: true, type, message }
+  setTimeout(() => {
+    toast.value.show = false
+  }, 3000)
+}
+
+// 生成幸运号弹窗
+const showLuckyModal = ref(false)
+const selectedLotteryType = ref<LotteryType>('双色球')
+const generatedNumbers = ref('')
+const generating = ref(false)
+const issueNumber = ref('')
+const drawRecords = ref<any[]>([])
+
+// 加载开奖记录
+const loadDrawRecords = async () => {
+  const res = await drawApi.list({ size: 500 }).catch(() => null)
+  if (res) drawRecords.value = res.data || []
+}
+
+// 验证期号：必须是未来的期号（大于等于当前最大期号）
+const validateIssueNumber = (): boolean => {
+  const inputIssue = issueNumber.value.trim()
+  if (!inputIssue) {
+    showToast('error', '请输入期号')
+    return false
+  }
+
+  // 获取当前彩票类型的所有期号
+  const currentTypeRecords = drawRecords.value
+    .filter(d => d.lottery_type === selectedLotteryType.value)
+    .map(d => d.issue_number)
+    .sort()
+
+  if (currentTypeRecords.length === 0) {
+    // 没有历史期号，需要用户手动确认（可能是新一期的第一注）
+    return confirm('未找到当前期号记录，确定要添加到新期号吗？')
+  }
+
+  // 获取最大期号
+  const maxIssue = currentTypeRecords[currentTypeRecords.length - 1]
+
+  // 验证期号必须大于等于当前最大期号
+  if (inputIssue < maxIssue) {
+    showToast('error', `期号不能小于当前期号 ${maxIssue}，请输入未来期号`)
+    return false
+  }
+
+  return true
+}
+
+// 随机生成号码
+const generateLuckyNumbers = (type: LotteryType): string => {
+  const config = LOTTERY_CONFIGS.find(c => c.type === type)
+  if (!config) return '{}'
+
+  const generateUnique = (min: number, max: number, count: number): number[] => {
+    const nums = new Set<number>()
+    while (nums.size < count) {
+      nums.add(Math.floor(Math.random() * (max - min + 1)) + min)
+    }
+    return Array.from(nums).sort((a, b) => a - b)
+  }
+
+  // 生成红球/前区/主号
+  const main = generateUnique(config.redRange.min, config.redRange.max, config.redRange.count)
+
+  // 3D、排列3、排列5 只有主号码
+  if (!config.blueRange) {
+    return JSON.stringify({ numbers: main })
+  }
+
+  // 有蓝球/后区
+  const blue = generateUnique(config.blueRange.min, config.blueRange.max, config.blueRange.count)
+
+  // 双色球/七星彩格式：{ red: [...], blue: [...] }
+  if (type === '双色球' || type === '七星彩') {
+    return JSON.stringify({ red: main, blue })
+  }
+  // 大乐透格式：{ front: [...], back: [...] }
+  if (type === '大乐透') {
+    return JSON.stringify({ front: main, back: blue })
+  }
+  // 七乐彩
+  return JSON.stringify({ numbers: main })
+}
+
+// 重新生成
+const regenerateNumbers = () => {
+  generating.value = true
+  setTimeout(() => {
+    generatedNumbers.value = generateLuckyNumbers(selectedLotteryType.value)
+    generating.value = false
+  }, 300)
+}
+
+// 打开弹窗
+const openLuckyModal = async () => {
+  selectedLotteryType.value = '双色球'
+  generatedNumbers.value = generateLuckyNumbers('双色球')
+  issueNumber.value = ''
+  await loadDrawRecords()
+  showLuckyModal.value = true
+}
+
+// 确认添加购买记录
+const confirmAddPurchase = async () => {
+  if (!generatedNumbers.value || !issueNumber.value.trim()) return
+  // 验证期号必须是未来期号
+  if (!validateIssueNumber()) {
+    return
+  }
+  try {
+    await purchaseApi.create({
+      lottery_type: selectedLotteryType.value,
+      issue_number: issueNumber.value.trim(),
+      purchase_date: new Date().toISOString().split('T')[0],
+      numbers: generatedNumbers.value,
+      bet_type: '单式',
+      amount: 2,
+      remark: '幸运号'
+    })
+    showLuckyModal.value = false
+    router.push('/purchase')
+  } catch (e) {
+    console.error('添加失败', e)
+  }
+}
+
+const loadData = async () => {
+  loading.value = true
+  try {
+    const [overviewRes, winningsRes] = await Promise.all([
+      statsApi.overview().catch(() => null),
+      statsApi.recentWinnings(5).catch(() => null)
+    ])
+    if (overviewRes?.data) overview.value = overviewRes.data
+    recentWinnings.value = Array.isArray(winningsRes?.data) ? winningsRes!.data : []
+  } catch (e) {
+    console.error('首页数据加载失败', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadData)
+
+const formatMoney = (v: number) => {
+  if (!v && v !== 0) return '¥0.00'
+  return `¥${Math.abs(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// 格式化号码为带圆圈的样式
+interface NumberBall {
+  num: string
+  type: 'red' | 'blue' | 'main'
+}
+
+const formatNumbers = (json: string): NumberBall[] => {
+  try {
+    const n = JSON.parse(json)
+    const balls: NumberBall[] = []
+    if (n.red) {
+      n.red.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      balls.push({ num: '|', type: 'main' })
+      n.blue.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue' }))
+    } else if (n.front) {
+      n.front.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      balls.push({ num: '|', type: 'main' })
+      n.back.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue' }))
+    } else if (n.numbers) {
+      // 排列3、排列5、福彩3D、七乐彩、七星彩：{ numbers: [...] }
+      n.numbers.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main' }))
+    } else if (n.main) {
+      n.main.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+    } else if (Array.isArray(n)) {
+      n.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main' }))
+    }
+    return balls
+  } catch { return [] }
+}
+
+const prizeColor = (level: number) => {
+  if (level === 1) return 'text-amber-600 bg-amber-50 border-amber-200'
+  if (level === 2) return 'text-slate-600 bg-slate-50 border-slate-200'
+  if (level <= 4) return 'text-orange-600 bg-orange-50 border-orange-200'
+  return 'text-blue-600 bg-blue-50 border-blue-200'
+}
+</script>
+
+<template>
+  <div class="animate-fade-in pb-36 md:pb-28">
+    <!-- Hero Section -->
+    <div class="gradient-primary rounded-2xl p-8 mb-8 text-white shadow-lg shadow-blue-500/20">
+      <h1 class="text-3xl font-bold mb-1">彩票助手</h1>
+      <p class="text-blue-100 text-sm mb-6">记录每一次幸运，分析每一次投注</p>
+      <div class="flex items-end gap-4">
+        <div class="text-blue-100 text-sm pb-1 shrink-0">总盈亏</div>
+        <div class="text-4xl md:text-5xl font-bold truncate">
+          {{ overview ? (overview.net_profit >= 0 ? '+' : '') + formatMoney(overview.net_profit) : '...' }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-2xl p-5 card-shadow hover:card-shadow-hover transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+            <ShoppingCart class="w-5 h-5 text-blue-500" />
+          </div>
+          <span class="text-xs text-slate-400">总投入</span>
+        </div>
+        <div class="text-2xl font-bold text-slate-800">
+          {{ overview ? formatMoney(overview.total_investment) : '--' }}
+        </div>
+        <div class="text-xs text-slate-400 mt-1">共 {{ overview?.total_bets ?? 0 }} 次投注</div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 card-shadow hover:card-shadow-hover transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <DollarSign class="w-5 h-5 text-emerald-500" />
+          </div>
+          <span class="text-xs text-slate-400">总中奖</span>
+        </div>
+        <div class="text-2xl font-bold text-emerald-600">
+          {{ overview ? formatMoney(overview.total_winning) : '--' }}
+        </div>
+        <div class="text-xs text-slate-400 mt-1">中奖 {{ overview?.win_count ?? 0 }} 次</div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 card-shadow hover:card-shadow-hover transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+            :class="(overview?.net_profit ?? 0) >= 0 ? 'bg-emerald-50' : 'bg-red-50'">
+            <component
+              :is="(overview?.net_profit ?? 0) >= 0 ? TrendingUp : TrendingDown"
+              class="w-5 h-5"
+              :class="(overview?.net_profit ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'"
+            />
+          </div>
+          <span class="text-xs text-slate-400">净盈亏</span>
+        </div>
+        <div class="text-2xl font-bold"
+          :class="(overview?.net_profit ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-500'">
+          {{ overview ? ((overview.net_profit >= 0 ? '+' : '') + formatMoney(overview.net_profit)) : '--' }}
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 card-shadow hover:card-shadow-hover transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+            <Target class="w-5 h-5 text-amber-500" />
+          </div>
+          <span class="text-xs text-slate-400">中奖率</span>
+        </div>
+        <div class="text-2xl font-bold text-amber-600">
+          {{ overview ? overview.win_rate.toFixed(1) + '%' : '--' }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Winnings -->
+    <div class="bg-white rounded-2xl card-shadow p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center gap-2">
+          <Trophy class="w-5 h-5 text-amber-500" />
+          <h2 class="text-lg font-semibold text-slate-800">最近中奖</h2>
+        </div>
+        <button
+          @click="router.push('/winnings')"
+          class="text-sm text-blue-500 hover:text-blue-600 cursor-pointer"
+        >
+          查看全部 →
+        </button>
+      </div>
+
+      <div v-if="loading" class="flex justify-center py-8">
+        <div class="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+
+      <div v-else-if="recentWinnings.length === 0" class="text-center py-12 text-slate-400">
+        <Trophy class="w-12 h-12 mx-auto mb-3 opacity-30" />
+        <p>暂无中奖记录，加油！</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="win in recentWinnings"
+          :key="win.id"
+          class="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors"
+        >
+          <div class="flex items-center gap-3">
+            <span class="px-2 py-1 rounded-lg text-xs font-medium border"
+              :class="prizeColor(win.prize_level)">
+              {{ win.prize_name }}
+            </span>
+            <div>
+              <div class="text-sm font-medium text-slate-700">
+                {{ win.lottery_type }} · {{ win.issue_number }}期
+              </div>
+              <div class="flex flex-wrap gap-0.5 mt-0.5">
+                <span v-for="(ball, idx) in formatNumbers(win.purchase?.numbers || '{}')" :key="idx"
+                  class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
+                  :class="ball.num === '|'
+                    ? 'text-slate-300 text-xs bg-transparent'
+                    : ball.type === 'blue'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-slate-200 text-slate-600'">
+                  {{ ball.num }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-base font-bold text-emerald-600">¥{{ win.prize_amount.toLocaleString() }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions - Fixed Bottom -->
+    <div class="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          @click="router.push('/purchase')"
+          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer text-sm"
+        >
+          <ShoppingCart class="w-4 h-4" />
+          <span class="whitespace-nowrap">录入购买</span>
+        </button>
+        <button
+          @click="router.push('/draw')"
+          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-emerald-500/30 cursor-pointer text-sm"
+        >
+          <Trophy class="w-4 h-4" />
+          <span class="whitespace-nowrap">录入开奖</span>
+        </button>
+        <!-- 拍照识别功能暂时禁用
+        <button
+          @click="openScanModal"
+          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-purple-500/30 cursor-pointer text-sm"
+        >
+          <Upload class="w-4 h-4" />
+          <span class="whitespace-nowrap">拍照识别</span>
+        </button>
+        -->
+        <button
+          @click="openLuckyModal"
+          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer text-sm"
+        >
+          <Sparkles class="w-4 h-4" />
+          <span class="whitespace-nowrap">幸运号</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 生成幸运号弹窗 -->
+    <div v-if="showLuckyModal" class="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showLuckyModal = false"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-slide-up">
+        <div class="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <Sparkles class="w-5 h-5 text-amber-500" />
+            生成幸运号
+          </h2>
+          <button @click="showLuckyModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <!-- 选择彩票类型 -->
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-2">选择彩票类型</label>
+            <div class="relative">
+              <select
+                v-model="selectedLotteryType"
+                @change="regenerateNumbers"
+                class="w-full px-4 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option v-for="config in LOTTERY_CONFIGS" :key="config.type" :value="config.type">
+                  {{ config.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 期号 -->
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-2">期号</label>
+            <input
+              v-model="issueNumber"
+              type="text"
+              placeholder="请输入期号"
+              class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <!-- 生成的号码 -->
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-2">生成的幸运号</label>
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 text-center">
+              <div v-if="generating" class="py-4">
+                <div class="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+              <div v-else class="flex flex-wrap items-center justify-center gap-1.5">
+                <template v-for="(ball, idx) in formatNumbers(generatedNumbers)" :key="idx">
+                  <span v-if="ball.num === '|'" class="text-slate-300 w-4 text-center">|</span>
+                  <span v-else
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-bold"
+                    :class="ball.type === 'blue' ? 'bg-blue-500 text-white' : ball.type === 'main' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'">
+                    {{ ball.num }}
+                  </span>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- 重新生成按钮 -->
+          <button
+            @click="regenerateNumbers"
+            :disabled="generating"
+            class="w-full py-2.5 text-amber-600 hover:bg-amber-50 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50"
+          >
+            重新生成
+          </button>
+        </div>
+
+        <div class="border-t border-slate-100 px-6 py-4 flex gap-3">
+          <button
+            @click="showLuckyModal = false"
+            class="flex-1 px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmAddPurchase"
+            class="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors cursor-pointer"
+          >
+            添加到购买记录
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 拍照识别弹窗 -->
+    <div v-if="showScanModal" class="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showScanModal = false"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-slide-up">
+        <div class="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <Upload class="w-5 h-5 text-purple-500" />
+            拍照识别彩票
+          </h2>
+          <button @click="showScanModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <!-- 选择图片来源 -->
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            @change="handleImageSelect"
+            class="hidden"
+          />
+          <button
+            @click="fileInput?.click()"
+            :disabled="scanLoading"
+            class="w-full py-5 border-2 border-dashed border-purple-200 rounded-xl flex flex-col items-center gap-2 text-purple-500 hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Upload class="w-10 h-10" />
+            <span class="text-sm font-medium">点击上传彩票照片</span>
+            <span class="text-xs text-slate-400">支持拍照或从相册选图，自动识别票面信息</span>
+          </button>
+
+          <!-- 加载状态 -->
+          <div v-if="scanLoading" class="text-center py-6">
+            <div class="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p class="text-slate-500 text-sm">正在识别彩票信息...</p>
+          </div>
+
+          <!-- 原始识别结果 -->
+          <div v-if="scannedRaw && !scanLoading" class="bg-slate-50 rounded-xl px-4 py-3">
+            <p class="text-xs text-slate-400 mb-1">识别到的内容：</p>
+            <p class="text-xs text-slate-600 font-mono break-all">{{ scannedRaw }}</p>
+          </div>
+
+          <!-- 识别提示/错误 -->
+          <div v-if="scanError && !scanLoading"
+            class="px-4 py-3 rounded-xl text-sm flex items-start gap-2"
+            :class="scannedRaw ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'"
+          >
+            <AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{{ scanError }}</span>
+          </div>
+
+          <!-- 识别结果表单（非加载中时始终显示，方便手动填写） -->
+          <div v-if="!scanLoading" class="space-y-3 pt-1">
+
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">1. 选择彩票类型 <span class="text-red-500">*</span></label>
+              <select
+                v-model="scanForm.lottery_type"
+                @change="onLotteryTypeChange"
+                class="w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:border-purple-400 cursor-pointer"
+                :class="scanForm.lottery_type ? 'border-green-300 bg-green-50' : 'border-slate-200'"
+              >
+                <option value="">请选择</option>
+                <option v-for="config in LOTTERY_CONFIGS" :key="config.type" :value="config.type">
+                  {{ config.name }}
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">2. 期号 <span class="text-red-500">*</span></label>
+              <input
+                v-model="scanForm.issue_number"
+                type="text"
+                placeholder="如：26026"
+                class="w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:border-purple-400"
+                :class="scanForm.issue_number ? 'border-green-300 bg-green-50' : 'border-slate-200'"
+              />
+            </div>
+
+            <!-- 根据彩票类型显示不同的号码输入模板 -->
+            <div v-if="scanForm.lottery_type">
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">3. 填写号码 <span class="text-red-500">*</span></label>
+
+              <!-- 大乐透：5个前区 + 2个后区 -->
+              <div v-if="scanForm.lottery_type === '大乐透'" class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-500 w-12">前区(5个)</span>
+                  <input v-model.number="dltFront[0]" type="number" min="1" max="35" placeholder="01" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="dltFront[1]" type="number" min="1" max="35" placeholder="02" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="dltFront[2]" type="number" min="1" max="35" placeholder="03" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="dltFront[3]" type="number" min="1" max="35" placeholder="04" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="dltFront[4]" type="number" min="1" max="35" placeholder="05" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-500 w-12">后区(2个)</span>
+                  <input v-model.number="dltBack[0]" type="number" min="1" max="12" placeholder="01" class="w-12 px-2 py-2 border border-blue-200 rounded-lg text-center bg-blue-50" />
+                  <input v-model.number="dltBack[1]" type="number" min="1" max="12" placeholder="02" class="w-12 px-2 py-2 border border-blue-200 rounded-lg text-center bg-blue-50" />
+                </div>
+              </div>
+
+              <!-- 双色球：6个红球 + 1个蓝球 -->
+              <div v-else-if="scanForm.lottery_type === '双色球'" class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-red-500 w-12">红球(6个)</span>
+                  <input v-model.number="ssqRed[0]" type="number" min="1" max="33" placeholder="01" class="w-12 px-2 py-2 border border-red-200 rounded-lg text-center bg-red-50" />
+                  <input v-model.number="ssqRed[1]" type="number" min="1" max="33" placeholder="02" class="w-12 px-2 py-2 border border-red-200 rounded-lg text-center bg-red-50" />
+                  <input v-model.number="ssqRed[2]" type="number" min="1" max="33" placeholder="03" class="w-12 px-2 py-2 border border-red-200 rounded-lg text-center bg-red-50" />
+                  <input v-model.number="ssqRed[3]" type="number" min="1" max="33" placeholder="04" class="w-12 px-2 py-2 border border-red-200 rounded-lg text-center bg-red-50" />
+                  <input v-model.number="ssqRed[4]" type="number" min="1" max="33" placeholder="05" class="w-12 px-2 py-2 border border-red-200 rounded-lg text-center bg-red-50" />
+                  <input v-model.number="ssqRed[5]" type="number" min="1" max="33" placeholder="06" class="w-12 px-2 py-2 border border-red-200 rounded-lg text-center bg-red-50" />
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-blue-500 w-12">蓝球(1个)</span>
+                  <input v-model.number="ssqBlue" type="number" min="1" max="16" placeholder="01" class="w-12 px-2 py-2 border border-blue-300 rounded-lg text-center bg-blue-50 font-bold" />
+                </div>
+              </div>
+
+              <!-- 3D/排列3：3个数字 -->
+              <div v-else-if="scanForm.lottery_type === '排列3' || scanForm.lottery_type === '福彩3D'" class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-500 w-12">号码(3个)</span>
+                  <input v-model.number="num3d[0]" type="number" min="0" max="9" placeholder="0" class="w-14 px-2 py-2 border rounded-lg text-center text-lg" />
+                  <input v-model.number="num3d[1]" type="number" min="0" max="9" placeholder="1" class="w-14 px-2 py-2 border rounded-lg text-center text-lg" />
+                  <input v-model.number="num3d[2]" type="number" min="0" max="9" placeholder="2" class="w-14 px-2 py-2 border rounded-lg text-center text-lg" />
+                </div>
+              </div>
+
+              <!-- 排列5：5个数字 -->
+              <div v-else-if="scanForm.lottery_type === '排列5'" class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-500 w-12">号码(5个)</span>
+                  <input v-model.number="num5[0]" type="number" min="0" max="9" placeholder="0" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num5[1]" type="number" min="0" max="9" placeholder="1" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num5[2]" type="number" min="0" max="9" placeholder="2" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num5[3]" type="number" min="0" max="9" placeholder="3" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num5[4]" type="number" min="0" max="9" placeholder="4" class="w-12 px-2 py-2 border rounded-lg text-center" />
+                </div>
+              </div>
+
+              <!-- 七乐彩/七星彩：7个号码 -->
+              <div v-else-if="scanForm.lottery_type === '七乐彩' || scanForm.lottery_type === '七星彩'" class="space-y-2">
+                <div class="flex flex-wrap items-center gap-1">
+                  <span class="text-xs text-slate-500 w-12">号码(7个)</span>
+                  <input v-model.number="num7[0]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="1" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num7[1]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="2" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num7[2]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="3" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num7[3]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="4" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num7[4]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="5" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num7[5]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="6" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                  <input v-model.number="num7[6]" type="number" min="1" :max="scanForm.lottery_type === '七乐彩' ? 30 : 9" placeholder="7" class="w-10 px-1 py-2 border rounded-lg text-center" />
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-slate-600 mb-1.5">购买日期</label>
+                <input
+                  v-model="scanForm.purchase_date"
+                  type="date"
+                  class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-purple-400"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-600 mb-1.5">金额 (元)</label>
+                <input
+                  v-model.number="scanForm.amount"
+                  type="number"
+                  step="2"
+                  min="0"
+                  class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-purple-400"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">倍数/注数</label>
+              <div class="flex gap-2">
+                <select
+                  v-model="scanForm.bet_type"
+                  class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-purple-400 cursor-pointer"
+                >
+                  <option value="单式">单式</option>
+                  <option value="复式">复式</option>
+                  <option value="胆拖">胆拖</option>
+                </select>
+                <input
+                  v-model.number="scanMultiple"
+                  type="number"
+                  min="1"
+                  placeholder="倍数"
+                  class="w-24 px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-purple-400"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">备注</label>
+              <input
+                v-model="scanForm.remark"
+                type="text"
+                placeholder="可选"
+                class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-purple-400"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="border-t border-slate-100 px-6 py-4 flex gap-3">
+          <button
+            @click="showScanModal = false"
+            class="flex-1 px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmScanPurchase"
+            :disabled="scanLoading"
+            class="flex-1 px-4 py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50"
+          >
+            添加到购买记录
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <Transition>
+      <div
+        v-if="toast.show"
+        class="fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up"
+        :class="{
+          'bg-emerald-500 text-white': toast.type === 'success',
+          'bg-red-500 text-white': toast.type === 'error',
+          'bg-blue-500 text-white': toast.type === 'info'
+        }"
+      >
+        <CheckCircle v-if="toast.type === 'success'" class="w-5 h-5" />
+        <AlertCircle v-else-if="toast.type === 'error'" class="w-5 h-5" />
+        <AlertCircle v-else class="w-5 h-5" />
+        <span class="font-medium">{{ toast.message }}</span>
+      </div>
+    </Transition>
+  </div>
+</template>
