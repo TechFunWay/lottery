@@ -274,6 +274,21 @@ const switchToLogin = () => {
             </div>
           </div>
 
+          <!-- 密码 -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-700 mb-2">密码</label>
+            <div class="relative">
+              <Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                v-model="password"
+                type="password"
+                placeholder="请输入密码（至少6位）"
+                class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
+                @keyup.enter="handleRegister"
+              />
+            </div>
+          </div>
+
           <!-- 邮箱（可选） -->
           <div class="mb-4">
             <label class="block text-sm font-medium text-slate-700 mb-2">
@@ -287,21 +302,6 @@ const switchToLogin = () => {
                 type="email"
                 placeholder="请输入邮箱"
                 class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
-              />
-            </div>
-          </div>
-
-          <!-- 密码 -->
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-slate-700 mb-2">密码</label>
-            <div class="relative">
-              <Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                v-model="password"
-                type="password"
-                placeholder="请输入密码（至少6位）"
-                class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
-                @keyup.enter="handleRegister"
               />
             </div>
           </div>
