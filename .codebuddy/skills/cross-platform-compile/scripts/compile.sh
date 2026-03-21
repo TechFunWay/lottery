@@ -61,7 +61,10 @@ fi
 echo -e "${GREEN}✓ 前端资源将随编译产物一起发布${NC}"
 
 # 编译参数
-LDFLAGS="-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT -s -w"
+# -s: 去除符号表
+# -w: 去除DWARF调试信息
+# -trimpath: 去除文件系统路径（去除开发环境路径）
+LDFLAGS="-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT -s -w -buildid="
 
 # 支持的平台
 PLATFORMS=(
@@ -94,7 +97,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     # 编译
     cd backend
     CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
-        go build -ldflags="$LDFLAGS" -o "../$OUTPUT_PATH/$OUTPUT_NAME" .
+        go build -trimpath -ldflags="$LDFLAGS" -o "../$OUTPUT_PATH/$OUTPUT_NAME" .
     cd ..
 
     # 复制前端资源到每个平台
