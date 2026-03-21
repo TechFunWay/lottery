@@ -54,10 +54,7 @@ $RECYCLE.BIN/
 *.lnk
 
 backend/server.log
-backend/caipiao.db
-backend/caipiao.db-shm
-backend/caipiao-backend
-backend/caipiao-server
+backend/data
 
 frontend/dist
 frontend/node_modules
