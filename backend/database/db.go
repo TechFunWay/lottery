@@ -14,7 +14,7 @@ func InitDB(dbPath string) {
 	var err error
 	// 使用 glebarez/sqlite 驱动（纯Go，无CGO依赖）
 	DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Silent), // 不打印SQL日志
 	})
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
