@@ -3,23 +3,18 @@ package main
 import (
 	"lottery-backend/database"
 	"lottery-backend/handlers"
+	"lottery-backend/logger"
 	"lottery-backend/middleware"
-	"lottery-backend/models"
 	"lottery-backend/services"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // 版本信息（编译时注入）
@@ -28,10 +23,6 @@ var (
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
-
-// 全局日志器
-var logger *zap.Logger
-var sugarLogger *zap.SugaredLogger
 
 // 命令行参数
 var (
@@ -47,135 +38,6 @@ var config struct {
 	webRoot string
 	port    string
 	dbPath  string
-}
-
-// 初始化日志系统
-func initLogger(dataDir string) {
-	// 创建必要的目录
-	logsDir := filepath.Join(dataDir, "logs")
-	dbDir := filepath.Join(dataDir, "db")
-
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		log.Fatalf("Failed to create logs directory: %v", err)
-	}
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		log.Fatalf("Failed to create db directory: %v", err)
-	}
-
-	// 按日期命名的日志文件
-	today := time.Now().Format("2006-01-02")
-	infoLogPath := filepath.Join(logsDir, "app-"+today+".log")
-	errorLogPath := filepath.Join(logsDir, "error-"+today+".log")
-
-	// 配置普通日志轮转（保留3天）
-	infoRotateHook := &lumberjack.Logger{
-		Filename:   infoLogPath,
-		MaxSize:    100, // MB
-		MaxBackups: 3,   // 保留3天
-		MaxAge:     3,   // 保留3天
-		Compress:   true, // 压缩旧日志
-	}
-
-	// 配置错误日志轮转（保留30天）
-	errorRotateHook := &lumberjack.Logger{
-		Filename:   errorLogPath,
-		MaxSize:    100, // MB
-		MaxBackups: 30,  // 保留30天
-		MaxAge:     30,  // 保留30天
-		Compress:   true, // 压缩旧日志
-	}
-
-	// 配置 zap 编码器
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      zapcore.OmitKey, // 生产环境不输出调用者路径
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-
-	// 创建日志核心
-	// Info 和 Debug 级别写入普通日志
-	infoCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.AddSync(infoRotateHook),
-		zap.InfoLevel,
-	)
-
-	// Error 级别写入错误日志
-	errorCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.AddSync(errorRotateHook),
-		zapcore.ErrorLevel,
-	)
-
-	// 判断是否为开发环境
-	isDevelopment := os.Getenv("ENV") == "development"
-
-	if isDevelopment {
-		// 开发环境：同时输出到控制台
-		consoleCore := zapcore.NewCore(
-			zapcore.NewConsoleEncoder(encoderConfig),
-			zapcore.AddSync(os.Stdout),
-			zap.InfoLevel,
-		)
-		// 组合核心
-		logger = zap.New(zapcore.NewTee(infoCore, errorCore, consoleCore), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-		sugarLogger = logger.Sugar()
-	} else {
-		// 生产环境：只输出到文件
-		logger = zap.New(zapcore.NewTee(infoCore, errorCore), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-		sugarLogger = logger.Sugar()
-	}
-
-	// 清理旧日志（非报错日志文件）
-	cleanupOldLogs(logsDir)
-}
-
-// 清理旧日志文件（只保留3天）
-func cleanupOldLogs(logsDir string) {
-	// 获取当前时间
-	now := time.Now()
-	// 3天前的日期
-	threeDaysAgo := now.AddDate(0, 0, -3)
-
-	// 读取日志目录
-	files, err := os.ReadDir(logsDir)
-	if err != nil {
-		return
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		// 只处理 app-YYYY-MM-DD.log 格式的日志文件
-		if strings.HasPrefix(file.Name(), "app-") && strings.HasSuffix(file.Name(), ".log") {
-			// 提取日期
-			dateStr := strings.TrimPrefix(file.Name(), "app-")
-			dateStr = strings.TrimSuffix(dateStr, ".log")
-
-			// 解析日期
-			fileDate, err := time.Parse("2006-01-02", dateStr)
-			if err != nil {
-				continue
-			}
-
-			// 如果文件日期超过3天，删除它
-			if fileDate.Before(threeDaysAgo) {
-				filePath := filepath.Join(logsDir, file.Name())
-				os.Remove(filePath)
-			}
-		}
-	}
 }
 
 func printVersion() {
@@ -252,8 +114,14 @@ func main() {
 		config.dbPath = filepath.Join(config.dataDir, "db", "database.db")
 	}
 
-	// 初始化日志
-	initLogger(config.dataDir)
+	// 初始化统一日志系统
+	if err := logger.InitLogger(config.dataDir); err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Sync()
+
+	sugarLogger := logger.GetSugarLogger()
 
 	// 打印版本信息
 	sugarLogger.Infof("🚀 Lottery Assistant %s", Version)
@@ -267,23 +135,26 @@ func main() {
 	// 初始化数据库
 	sugarLogger.Infof("📄 Database path: %s", config.dbPath)
 	database.InitDB(config.dbPath)
-	database.AutoMigrate(
-		&models.User{},
-		&models.SystemConfig{},
-		&models.PurchaseRecord{},
-		&models.DrawResult{},
-		&models.WinningRecord{},
-	)
 
-	// 初始化系统默认配置
-	cfgSvc := services.ConfigService{}
-	cfgSvc.InitDefaultConfigs()
+	// 执行数据库升级
+	sugarLogger.Info("🔄 Checking database upgrades...")
+	upgradeSvc := services.NewUpgradeService(database.DB, config.dataDir)
+	if err := upgradeSvc.RunUpgrades(); err != nil {
+		sugarLogger.Errorf("❌ Database upgrade failed: %v", err)
+		os.Exit(1)
+	}
+
+	// 根据环境设置 Gin 模式
+	if os.Getenv("ENV") == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
 
 	// 初始化 Gin，使用 zap 日志
-	gin.DefaultWriter = &zapWriter{sugarLogger}
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(ginLogger(sugarLogger))
+	r.Use(ginLogger(logger.GetSugarLogger()))
 
 	// CORS 配置 - 生产环境允许所有来源
 	corsOrigins := []string{"*"}
@@ -391,7 +262,7 @@ func main() {
 	// 检查前端文件是否存在
 	indexPath := filepath.Join(webRoot, "index.html")
 	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		sugarLogger.Warnf("⚠️  Frontend index.html not found at %s. Please place the frontend build files in %s directory.", indexPath, webRoot)
+		sugarLogger.Warnf("⚠️  Frontend index.html not found at %s. Please place frontend build files in %s directory.", indexPath, webRoot)
 	} else {
 		sugarLogger.Infof("✅ Frontend files loaded from %s", webRoot)
 	}
@@ -451,7 +322,7 @@ func (w *zapWriter) Write(p []byte) (n int, err error) {
 }
 
 // ginLogger Gin 中间件，记录请求日志
-func ginLogger(logger *zap.SugaredLogger) gin.HandlerFunc {
+func ginLogger(log *logger.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := c.Request.Context()
 		path := c.Request.URL.Path
@@ -468,7 +339,7 @@ func ginLogger(logger *zap.SugaredLogger) gin.HandlerFunc {
 			path = path + "?" + query
 		}
 
-		logger.Infof("[%s] %s | status: %d | IP: %s",
+		log.Infof("[%s] %s | status: %d | IP: %s",
 			c.Request.Method,
 			path,
 			c.Writer.Status(),
@@ -477,7 +348,7 @@ func ginLogger(logger *zap.SugaredLogger) gin.HandlerFunc {
 
 		// 记录错误
 		for _, err := range c.Errors {
-			logger.Errorf("Request error: %v", err.Error())
+			log.Errorf("Request error: %v", err.Error())
 		}
 
 		_ = start

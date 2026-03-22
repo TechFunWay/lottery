@@ -2,12 +2,12 @@ package services
 
 import (
 	"lottery-backend/database"
+	"lottery-backend/logger"
 	"lottery-backend/models"
 	"lottery-backend/rules"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
@@ -61,11 +61,11 @@ func (s *DrawService) CreateDrawResult(draw *models.DrawResult) error {
 	err := database.DB.Where("lottery_type = ? AND issue_number = ?", draw.LotteryType, draw.IssueNumber).First(&existing).Error
 	if err == nil {
 		// 记录已存在，不处理
-		log.Printf("期号 %s 已存在（未删除），跳过", draw.IssueNumber)
+		logger.GetSugarLogger().Warnf("期号 %s 已存在（未删除），跳过", draw.IssueNumber)
 		return fmt.Errorf("该期号已存在")
 	}
 	if err != gorm.ErrRecordNotFound {
-		log.Printf("检查期号 %s 出错: %v", draw.IssueNumber, err)
+		logger.GetSugarLogger().Errorf("检查期号 %s 出错: %v", draw.IssueNumber, err)
 		return err
 	}
 
@@ -76,7 +76,7 @@ func (s *DrawService) CreateDrawResult(draw *models.DrawResult) error {
 		First(&softDeleted).Error
 
 	if err == nil {
-		log.Printf("期号 %s 存在软删除记录，恢复并更新", draw.IssueNumber)
+		logger.GetSugarLogger().Infof("期号 %s 存在软删除记录，恢复并更新", draw.IssueNumber)
 		// 存在软删除的记录，使用原始记录恢复
 		softDeleted.DrawDate = draw.DrawDate
 		softDeleted.Numbers = draw.Numbers
@@ -86,12 +86,12 @@ func (s *DrawService) CreateDrawResult(draw *models.DrawResult) error {
 	}
 
 	if err != gorm.ErrRecordNotFound {
-		log.Printf("检查软删除期号 %s 出错: %v", draw.IssueNumber, err)
+		logger.GetSugarLogger().Errorf("检查软删除期号 %s 出错: %v", draw.IssueNumber, err)
 		return err
 	}
 
 	// 全新记录，直接创建
-	log.Printf("期号 %s 不存在，创建新记录", draw.IssueNumber)
+	logger.GetSugarLogger().Infof("期号 %s 不存在，创建新记录", draw.IssueNumber)
 	return database.DB.Create(draw).Error
 }
 
@@ -678,16 +678,16 @@ func (s *WinningService) CalculateWinning(purchase *models.PurchaseRecord, draw 
 func (s *WinningService) CheckAndSaveWinnings(drawID uint) error {
 	var draw models.DrawResult
 	if err := database.DB.First(&draw, drawID).Error; err != nil {
-		log.Printf("查找开奖记录失败: %v", err)
+		logger.GetSugarLogger().Errorf("查找开奖记录失败: %v", err)
 		return err
 	}
 
-	log.Printf("开始检查中奖: 彩票类型=%s, 期号=%s", draw.LotteryType, draw.IssueNumber)
+	logger.GetSugarLogger().Infof("开始检查中奖: 彩票类型=%s, 期号=%s", draw.LotteryType, draw.IssueNumber)
 
 	var purchases []models.PurchaseRecord
 	database.DB.Where("lottery_type = ? AND issue_number = ?", draw.LotteryType, draw.IssueNumber).Find(&purchases)
 
-	log.Printf("找到 %d 条匹配的购买记录", len(purchases))
+	logger.GetSugarLogger().Infof("找到 %d 条匹配的购买记录", len(purchases))
 
 	for _, purchase := range purchases {
 		winning := s.CalculateWinning(&purchase, &draw)
@@ -697,7 +697,7 @@ func (s *WinningService) CheckAndSaveWinnings(drawID uint) error {
 		// 只保存中奖的记录（PrizeLevel > 0）
 		if winning.PrizeLevel > 0 {
 			if err := database.DB.Create(winning).Error; err != nil {
-				log.Printf("保存中奖记录失败: %v", err)
+				logger.GetSugarLogger().Errorf("保存中奖记录失败: %v", err)
 			}
 		}
 
@@ -710,7 +710,7 @@ func (s *WinningService) CheckAndSaveWinnings(drawID uint) error {
 		}
 
 		result := database.DB.Model(&models.PurchaseRecord{}).Where("id = ?", purchase.ID).Update("status", status)
-		log.Printf("更新购买记录状态: ID=%d, 期号=%s, 奖级=%d, 状态=%s, 影响行数=%d",
+		logger.GetSugarLogger().Infof("更新购买记录状态: ID=%d, 期号=%s, 奖级=%d, 状态=%s, 影响行数=%d",
 			purchase.ID, purchase.IssueNumber, winning.PrizeLevel, status, result.RowsAffected)
 	}
 	return nil
