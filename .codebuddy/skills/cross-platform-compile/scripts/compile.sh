@@ -94,9 +94,9 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     OUTPUT_PATH="$OUTPUT_DIR/$PROJECT_NAME-$VERSION-$GOOS-$GOARCH"
     mkdir -p "$OUTPUT_PATH"
 
-    # 编译
+    # 编译（ENV=production 关闭 Gin 调试日志）
     cd backend
-    CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
+    CGO_ENABLED=0 ENV=production GOOS="$GOOS" GOARCH="$GOARCH" \
         go build -trimpath -ldflags="$LDFLAGS" -o "../$OUTPUT_PATH/$OUTPUT_NAME" .
     cd ..
 

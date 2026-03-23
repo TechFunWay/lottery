@@ -22,36 +22,29 @@
 
 ## 使用方法
 
-### 基本打包
+### 打包多平台应用
 
-打包应用到输出目录：
+打包 FunNAS 应用（ARM 和 x86）：
 
 ```bash
-.codebuddy/skills/funnas-packager/scripts/package.sh
+.codebuddy/skills/fnnas-packager/scripts/package-multiplatform.sh
 ```
 
-### 打包并清理
+### 前置步骤
 
-打包应用并清理临时文件：
-
+1. 先编译 Go 后端：
 ```bash
-.codebuddy/skills/funnas-packager/scripts/package.sh --clean
+.codebuddy/skills/cross-platform-compile/scripts/compile.sh
 ```
 
-### 指定输出目录
-
-打包应用到指定目录：
-
+2. 编译前端：
 ```bash
-.codebuddy/skills/funnas-packager/scripts/package.sh --output /path/to/output
+cd frontend && npm run build
 ```
 
-### 打包并压缩
-
-打包应用并创建压缩包：
-
+3. 打包 FunNAS 应用：
 ```bash
-.codebuddy/skills/funnas-packager/scripts/package.sh --compress
+.codebuddy/skills/fnnas-packager/scripts/package-multiplatform.sh
 ```
 
 ## 打包流程
@@ -153,13 +146,7 @@ restart=true
 
 ## 参数说明
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--output` | 输出目录 | `./release/funnas/` |
-| `--clean` | 清理临时文件 | false |
-| `--compress` | 创建压缩包 | false |
-| `--version` | 指定版本号 | 从 git 获取 |
-| `--with-data` | 包含数据库 | false |
+当前脚本为自动模式，自动获取版本号并打包所有平台。
 
 ## 注意事项
 
@@ -205,38 +192,15 @@ cat techfunway-lottery/manifest
 
 ## 示例
 
-### 示例 1：基本打包
+### 示例：打包 FunNAS 应用
 
 ```bash
-# 打包应用
-.codebuddy/skills/funnas-packager/scripts/package.sh
+# 完整打包流程
+.codebuddy/skills/cross-platform-compile/scripts/compile.sh  # 编译后端
+cd frontend && npm run build                                  # 编译前端
+.codebuddy/skills/fnnas-packager/scripts/package-multiplatform.sh  # 打包
 
-# 输出：./release/funnas/techfunway-lottery/
-```
-
-### 示例 2：打包并压缩
-
-```bash
-# 打包并创建压缩包
-.codebuddy/skills/funnas-packager/scripts/package.sh --compress
-
-# 输出：./release/funnas/techfunway-lottery.tar.gz
-```
-
-### 示例 3：指定版本打包
-
-```bash
-# 打包指定版本
-.codebuddy/skills/funnas-packager/scripts/package.sh --version v1.0.0
-
-# 输出包含版本信息
-```
-
-### 示例 4：包含数据库打包
-
-```bash
-# 打包并包含数据库
-.codebuddy/skills/funnas-packager/scripts/package.sh --with-data
-
-# 输出包含数据库文件
+# 输出：release/v1.0.0/
+# ├── techfunway-lottery-v1.0.0-arm.fpk
+# └── techfunway-lottery-v1.0.0-x86.fpk
 ```

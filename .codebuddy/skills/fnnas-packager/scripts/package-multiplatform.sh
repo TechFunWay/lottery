@@ -71,9 +71,16 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     FULL_PATH="$PROJECT_ROOT/release/$VERSION/lottery-assistant-$VERSION-$PLATFORM/$BINARY_NAME"
     
     if [ ! -f "$FULL_PATH" ]; then
-        echo -e "${RED}❌ 错误: 未找到 $PLATFORM 的编译产物${NC}"
-        echo -e "${YELLOW}请先运行跨平台编译: .codebuddy/skills/cross-platform-compile/scripts/compile.sh${NC}"
-        exit 1
+        echo -e "${YELLOW}⚠️  未找到 $PLATFORM 的编译产物，自动运行跨平台编译...${NC}"
+        cd "$PROJECT_ROOT"
+        .codebuddy/skills/cross-platform-compile/scripts/compile.sh
+        cd - > /dev/null
+
+        # 重新检查
+        if [ ! -f "$FULL_PATH" ]; then
+            echo -e "${RED}❌ 错误: 仍未找到 $PLATFORM 的编译产物${NC}"
+            exit 1
+        fi
     fi
     
     BINARY_FILES+=("$FULL_PATH:$PLATFORM")
