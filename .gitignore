@@ -67,3 +67,5 @@ test-build
 
 .idea
 release
+backend/index.html
+backend/lottery-web
