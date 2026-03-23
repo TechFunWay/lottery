@@ -144,11 +144,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 根据环境设置 Gin 模式
-	if os.Getenv("ENV") == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	} else {
+	// 根据环境设置 Gin 模式（默认生产模式，关闭调试日志）
+	env := os.Getenv("ENV")
+	if env == "development" {
 		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	// 初始化 Gin，使用 zap 日志

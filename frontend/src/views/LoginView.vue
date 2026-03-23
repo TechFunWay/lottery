@@ -244,7 +244,9 @@ const switchToLogin = () => {
 
       <!-- ========== 注册卡片 ========== -->
       <div v-else class="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8">
-        <h2 class="text-2xl font-bold text-slate-800 mb-6">注册</h2>
+        <h2 class="text-2xl font-bold text-slate-800 mb-6">
+          {{ adminExists ? '注册' : '创建管理员账号' }}
+        </h2>
 
         <!-- 成功状态 -->
         <div v-if="registerSuccess" class="text-center py-4">
