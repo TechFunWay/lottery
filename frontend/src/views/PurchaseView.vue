@@ -468,26 +468,28 @@ const recheckWinnings = async () => {
 <template>
   <div class="animate-fade-in">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-800">购买记录</h1>
-        <p class="text-slate-400 text-sm mt-1">共 {{ purchases.length }} 条记录，累计投入 ¥{{ totalAmount.toFixed(2) }}</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          @click="openLuckyModal"
-          class="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer"
-        >
-          <Sparkles class="w-4 h-4" />
-          幸运号
-        </button>
-        <button
-          @click="openModal()"
-          class="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer"
-        >
-          <Plus class="w-4 h-4" />
-          新增
-        </button>
+    <div class="mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800">购买记录</h1>
+          <p class="text-slate-400 text-sm mt-1">共 {{ purchases.length }} 条记录，累计投入 ¥{{ totalAmount.toFixed(2) }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="openLuckyModal"
+            class="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer"
+          >
+            <Sparkles class="w-4 h-4" />
+            <span class="hidden sm:inline">幸运号</span>
+          </button>
+          <button
+            @click="openModal()"
+            class="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer"
+          >
+            <Plus class="w-4 h-4" />
+            <span class="hidden sm:inline">新增</span>
+          </button>
+        </div>
       </div>
     </div>
 

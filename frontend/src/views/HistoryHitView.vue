@@ -130,7 +130,7 @@ const formatNumbersWithHit = (purchaseJson: string, drawJson: string): NumberBal
   }
 }
 
-// 计算中奖金额（简化版，根据命中个数估算）
+// 计算中奖金额（按照后端规则）
 const calculatePrize = (purchaseJson: string, drawJson: string): number => {
   const purchase = parseNumbers(purchaseJson)
   const draw = parseNumbers(drawJson)
@@ -143,42 +143,156 @@ const calculatePrize = (purchaseJson: string, drawJson: string): number => {
   if (draw.front) draw.front.forEach((n: number) => drawRedSet.add(n))
   if (draw.back) draw.back.forEach((n: number) => drawBlueSet.add(n))
   if (draw.main) draw.main.forEach((n: number) => drawRedSet.add(n))
+  if (draw.special) draw.special.forEach((n: number) => drawBlueSet.add(n))
   if (draw.numbers) draw.numbers.forEach((n: number) => drawRedSet.add(n))
 
   let redHits = 0
   let blueHits = 0
 
   if (purchase.red) {
+    // 双色球
     redHits = purchase.red.filter((n: number) => drawRedSet.has(n)).length
-    blueHits = purchase.blue ? purchase.blue.filter((n: number) => drawBlueSet.has(n)).length : 0
+    blueHits = purchase.blue && purchase.blue.length > 0 && draw.blue && draw.blue.length > 0 && purchase.blue[0] === draw.blue[0] ? 1 : 0
+
+    // 双色球中奖规则
+    if (redHits === 6 && blueHits === 1) return 5000000  // 一等奖
+    if (redHits === 6 && blueHits === 0) return 200000   // 二等奖
+    if (redHits === 5 && blueHits === 1) return 3000     // 三等奖
+    if (redHits === 5 && blueHits === 0) return 200      // 四等奖
+    if (redHits === 4 && blueHits === 1) return 200      // 四等奖
+    if (redHits === 4 && blueHits === 0) return 10       // 五等奖
+    if (redHits === 3 && blueHits === 1) return 10       // 五等奖
+    if (redHits === 2 && blueHits === 1) return 5        // 六等奖
+    if (redHits === 1 && blueHits === 1) return 5        // 六等奖
+    if (redHits === 0 && blueHits === 1) return 5        // 六等奖
   } else if (purchase.front) {
+    // 大乐透
     redHits = purchase.front.filter((n: number) => drawRedSet.has(n)).length
     blueHits = purchase.back ? purchase.back.filter((n: number) => drawBlueSet.has(n)).length : 0
-  } else if (purchase.main) {
-    redHits = purchase.main.filter((n: number) => drawRedSet.has(n)).length
-  } else if (purchase.numbers) {
-    redHits = purchase.numbers.filter((n: number) => drawRedSet.has(n)).length
-  }
 
-  // 简化中奖金额计算
-  if (purchase.red || purchase.front) {
-    // 双色球或大乐透
-    if (blueHits === 1 && redHits >= 3) return 3000
-    if (blueHits === 1 && redHits === 2) return 200
-    if (blueHits === 1 && redHits === 1) return 10
-    if (blueHits === 1) return 5
-    if (redHits >= 6) return 1000000
-    if (redHits >= 5) return 3000
-    if (redHits >= 4) return 200
-    if (redHits >= 3) return 10
-  } else if (purchase.main || purchase.numbers) {
-    // 3D、排列3、排列5等
-    if (redHits === 3) return 1000
-    if (redHits === 2) return 100
-    if (redHits === 1) return 10
+    // 大乐透中奖规则
+    if (redHits === 5 && blueHits === 2) return 10000000 // 一等奖
+    if (redHits === 5 && blueHits === 1) return 500000   // 二等奖
+    if (redHits === 5 && blueHits === 0) return 10000    // 三等奖
+    if (redHits === 4 && blueHits === 2) return 3000     // 四等奖
+    if (redHits === 4 && blueHits === 1) return 300      // 五等奖
+    if (redHits === 3 && blueHits === 2) return 300      // 五等奖
+    if (redHits === 4 && blueHits === 0) return 100      // 六等奖
+    if (redHits === 3 && blueHits === 1) return 100      // 六等奖
+    if (redHits === 2 && blueHits === 2) return 100      // 六等奖
+    if (redHits === 3 && blueHits === 0) return 15       // 七等奖
+    if (redHits === 2 && blueHits === 1) return 15       // 七等奖
+    if (redHits === 1 && blueHits === 2) return 15       // 七等奖
+    if (redHits === 0 && blueHits === 2) return 15       // 七等奖
+  } else if (purchase.main) {
+    // 七乐彩
+    redHits = purchase.main.filter((n: number) => drawRedSet.has(n)).length
+    blueHits = purchase.special && purchase.special.length > 0 && draw.special && draw.special.length > 0 && purchase.special[0] === draw.special[0] ? 1 : 0
+
+    // 七乐彩中奖规则
+    if (redHits === 7 && blueHits === 0) return 5000000  // 一等奖
+    if (redHits === 6 && blueHits === 1) return 10000    // 二等奖
+    if (redHits === 6 && blueHits === 0) return 1000     // 三等奖
+    if (redHits === 5 && blueHits === 1) return 100      // 四等奖
+    if (redHits === 5 && blueHits === 0) return 100      // 四等奖
+    if (redHits === 4 && blueHits === 1) return 30       // 五等奖
+    if (redHits === 4 && blueHits === 0) return 30       // 五等奖
+    if (redHits === 3 && blueHits === 1) return 10       // 六等奖
+    if (redHits === 7 && blueHits === 0) return 5        // 七等奖（仅特别号）
+  } else if (purchase.numbers) {
+    // 福彩3D、排列3、排列5等 - 需要考虑直选/组选，这里简化处理
+    // 实际上需要根据 bet_type 来计算，这里只能做简化
+    // 3D/排列3：直选1040/1000，组选173/167
+    // 排列5：直选100000
+    // 这个简化版本可能不准确，但历史命中页面主要用于参考
+    if (redHits >= 3) return 1000  // 简化处理
+    if (redHits >= 2) return 100
+    if (redHits >= 1) return 10
   }
 
   return 0
+}
+
+// 计算奖项等级
+const getPrizeLevel = (purchaseJson: string, drawJson: string): { level: number; name: string } => {
+  const purchase = parseNumbers(purchaseJson)
+  const draw = parseNumbers(drawJson)
+
+  const drawRedSet = new Set<number>()
+  const drawBlueSet = new Set<number>()
+
+  if (draw.red) draw.red.forEach((n: number) => drawRedSet.add(n))
+  if (draw.blue) draw.blue.forEach((n: number) => drawBlueSet.add(n))
+  if (draw.front) draw.front.forEach((n: number) => drawRedSet.add(n))
+  if (draw.back) draw.back.forEach((n: number) => drawBlueSet.add(n))
+  if (draw.main) draw.main.forEach((n: number) => drawRedSet.add(n))
+  if (draw.special) draw.special.forEach((n: number) => drawBlueSet.add(n))
+  if (draw.numbers) draw.numbers.forEach((n: number) => drawRedSet.add(n))
+
+  let redHits = 0
+  let blueHits = 0
+
+  if (purchase.red) {
+    // 双色球
+    redHits = purchase.red.filter((n: number) => drawRedSet.has(n)).length
+    blueHits = purchase.blue && purchase.blue.length > 0 && draw.blue && draw.blue.length > 0 && purchase.blue[0] === draw.blue[0] ? 1 : 0
+
+    if (redHits === 6 && blueHits === 1) return { level: 1, name: '一等奖' }
+    if (redHits === 6 && blueHits === 0) return { level: 2, name: '二等奖' }
+    if (redHits === 5 && blueHits === 1) return { level: 3, name: '三等奖' }
+    if (redHits === 5 && blueHits === 0) return { level: 4, name: '四等奖' }
+    if (redHits === 4 && blueHits === 1) return { level: 4, name: '四等奖' }
+    if (redHits === 4 && blueHits === 0) return { level: 5, name: '五等奖' }
+    if (redHits === 3 && blueHits === 1) return { level: 5, name: '五等奖' }
+    if (redHits === 2 && blueHits === 1) return { level: 6, name: '六等奖' }
+    if (redHits === 1 && blueHits === 1) return { level: 6, name: '六等奖' }
+    if (redHits === 0 && blueHits === 1) return { level: 6, name: '六等奖' }
+  } else if (purchase.front) {
+    // 大乐透
+    redHits = purchase.front.filter((n: number) => drawRedSet.has(n)).length
+    blueHits = purchase.back ? purchase.back.filter((n: number) => drawBlueSet.has(n)).length : 0
+
+    if (redHits === 5 && blueHits === 2) return { level: 1, name: '一等奖' }
+    if (redHits === 5 && blueHits === 1) return { level: 2, name: '二等奖' }
+    if (redHits === 5 && blueHits === 0) return { level: 3, name: '三等奖' }
+    if (redHits === 4 && blueHits === 2) return { level: 4, name: '四等奖' }
+    if (redHits === 4 && blueHits === 1) return { level: 5, name: '五等奖' }
+    if (redHits === 3 && blueHits === 2) return { level: 5, name: '五等奖' }
+    if (redHits === 4 && blueHits === 0) return { level: 6, name: '六等奖' }
+    if (redHits === 3 && blueHits === 1) return { level: 6, name: '六等奖' }
+    if (redHits === 2 && blueHits === 2) return { level: 6, name: '六等奖' }
+    if (redHits === 3 && blueHits === 0) return { level: 7, name: '七等奖' }
+    if (redHits === 2 && blueHits === 1) return { level: 7, name: '七等奖' }
+    if (redHits === 1 && blueHits === 2) return { level: 7, name: '七等奖' }
+    if (redHits === 0 && blueHits === 2) return { level: 7, name: '七等奖' }
+  } else if (purchase.main) {
+    // 七乐彩
+    redHits = purchase.main.filter((n: number) => drawRedSet.has(n)).length
+    blueHits = purchase.special && purchase.special.length > 0 && draw.special && draw.special.length > 0 && purchase.special[0] === draw.special[0] ? 1 : 0
+
+    if (redHits === 7 && blueHits === 0) return { level: 1, name: '一等奖' }
+    if (redHits === 6 && blueHits === 1) return { level: 2, name: '二等奖' }
+    if (redHits === 6 && blueHits === 0) return { level: 3, name: '三等奖' }
+    if (redHits === 5 && blueHits === 1) return { level: 4, name: '四等奖' }
+    if (redHits === 5 && blueHits === 0) return { level: 4, name: '四等奖' }
+    if (redHits === 4 && blueHits === 1) return { level: 5, name: '五等奖' }
+    if (redHits === 4 && blueHits === 0) return { level: 5, name: '五等奖' }
+    if (redHits === 3 && blueHits === 1) return { level: 6, name: '六等奖' }
+    if (redHits === 7 && blueHits === 0) return { level: 7, name: '七等奖' }
+  }
+
+  return { level: 0, name: '未中奖' }
+}
+
+// 获取奖项样式类
+const getPrizeLevelClass = (lotteryType: string, prize: number): string => {
+  if (prize <= 0) return 'bg-slate-100 text-slate-500'
+  if (prize >= 5000000) return 'bg-amber-100 text-amber-700 border border-amber-300'  // 一等奖
+  if (prize >= 1000000) return 'bg-slate-100 text-slate-700 border border-slate-300'  // 二等奖
+  if (prize >= 10000) return 'bg-orange-100 text-orange-700 border border-orange-300'  // 三等奖
+  if (prize >= 1000) return 'bg-blue-100 text-blue-700 border border-blue-300'  // 四等奖
+  if (prize >= 100) return 'bg-emerald-100 text-emerald-700 border border-emerald-300'  // 五等奖/六等奖
+  return 'bg-indigo-100 text-indigo-700 border border-indigo-300'  // 七等奖
 }
 
 // 命中结果详情
@@ -265,8 +379,8 @@ const purchaseHitHistory = computed<PurchaseHitHistory[]>(() => {
       const blueHits = hitBlueBalls.length
       const prize = calculatePrize(purchase.numbers, draw.numbers)
 
-      // 只有命中了球的才记录
-      if (redHits > 0 || blueHits > 0) {
+      // 只有中奖（有奖金）的才记录
+      if (prize > 0) {
         hitDetails.push({
           draw,
           redHits,
@@ -280,7 +394,7 @@ const purchaseHitHistory = computed<PurchaseHitHistory[]>(() => {
 
     const totalPrize = hitDetails.reduce((sum, h) => sum + h.prize, 0)
 
-    // 有命中记录就展示
+    // 有中奖记录就展示
     if (hitDetails.length > 0) {
       result.push({
         purchase,
@@ -354,7 +468,7 @@ const toggleExpand = (id: number) => {
         <div class="text-2xl font-bold text-slate-800">{{ stats.totalPurchases }}</div>
       </div>
       <div class="bg-white rounded-xl p-4 card-shadow">
-        <div class="text-xs text-slate-400 mb-1">有命中记录</div>
+        <div class="text-xs text-slate-400 mb-1">有中奖记录</div>
         <div class="text-2xl font-bold text-blue-600">{{ stats.hitCount }}</div>
       </div>
       <div class="bg-white rounded-xl p-4 card-shadow">
@@ -375,7 +489,7 @@ const toggleExpand = (id: number) => {
     <!-- Empty -->
     <div v-else-if="purchaseHitHistory.length === 0" class="text-center py-16 text-slate-400">
       <Search class="w-12 h-12 mx-auto mb-3 opacity-30" />
-      <p>暂无命中记录</p>
+      <p>暂无中奖记录</p>
     </div>
 
     <!-- List -->
@@ -385,12 +499,18 @@ const toggleExpand = (id: number) => {
         :key="item.purchase.id"
         class="bg-white rounded-2xl p-4 card-shadow"
       >
-        <!-- 默认显示：投注号码、命中个数、奖金 -->
+        <!-- 默认显示：期号、投注号码、中奖次数、奖金 -->
         <div
           class="flex items-center justify-between cursor-pointer"
           @click="toggleExpand(item.purchase.id)"
         >
           <div class="flex items-center gap-3 flex-1 min-w-0">
+            <!-- 期号 -->
+            <div class="shrink-0">
+              <div class="text-xs text-slate-400 mb-0.5">期号</div>
+              <div class="text-sm font-medium text-slate-700">{{ item.purchase.issue_number }}</div>
+            </div>
+
             <!-- 投注号码 -->
             <div class="flex items-center gap-1 min-w-0">
               <span v-if="hasRed(item.purchase.numbers)" v-for="(ball, idx) in getRedBalls(item.purchase.numbers)" :key="'r'+idx"
@@ -407,7 +527,7 @@ const toggleExpand = (id: number) => {
 
           <div class="flex items-center gap-3 shrink-0">
             <div class="text-right">
-              <div class="text-xs text-slate-400">命中 {{ item.hitDetails.length }} 期</div>
+              <div class="text-xs text-slate-400">中奖 {{ item.hitDetails.length }} 期</div>
               <div class="text-lg font-bold text-amber-600">¥{{ item.totalPrize.toLocaleString() }}</div>
             </div>
             <ChevronDown
@@ -424,6 +544,10 @@ const toggleExpand = (id: number) => {
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-slate-700">第 {{ hit.draw.issue_number }} 期</span>
                 <span class="text-xs text-slate-400">{{ hit.draw.draw_date.split('T')[0] }}</span>
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium"
+                  :class="getPrizeLevelClass(item.purchase.lottery_type, hit.prize)">
+                  {{ getPrizeLevel(item.purchase.numbers, hit.draw.numbers).name }}
+                </span>
               </div>
               <span v-if="hit.prize > 0" class="text-sm font-bold text-emerald-600">¥{{ hit.prize.toLocaleString() }}</span>
             </div>
