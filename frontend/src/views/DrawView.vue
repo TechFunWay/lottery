@@ -261,26 +261,28 @@ const fetchBatchDraws = async () => {
 <template>
   <div class="animate-fade-in">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-800">开奖管理</h1>
-        <p class="text-slate-400 text-sm mt-1">共 {{ draws.length }} 条开奖记录</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <button
-          @click="openBatchModal()"
-          class="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-500/30 cursor-pointer"
-        >
-          <Download class="w-4 h-4" />
-          批量获取
-        </button>
-        <button
-          @click="openModal()"
-          class="flex items-center gap-2 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer"
-        >
-          <Plus class="w-4 h-4" />
-          录入开奖
-        </button>
+    <div class="mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800">开奖管理</h1>
+          <p class="text-slate-400 text-sm mt-1">共 {{ draws.length }} 条开奖记录</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            @click="openBatchModal()"
+            class="flex items-center gap-2 px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-500/30 cursor-pointer"
+          >
+            <Download class="w-4 h-4" />
+            <span class="hidden sm:inline">批量获取</span>
+          </button>
+          <button
+            @click="openModal()"
+            class="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer"
+          >
+            <Plus class="w-4 h-4" />
+            <span class="hidden sm:inline">录入开奖</span>
+          </button>
+        </div>
       </div>
     </div>
 

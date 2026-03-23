@@ -210,7 +210,7 @@ const prizeColor = (level: number) => {
 </script>
 
 <template>
-  <div class="animate-fade-in pb-36 md:pb-28">
+  <div class="animate-fade-in min-h-screen flex flex-col pb-20 md:pb-24">
     <!-- Hero Section -->
     <div class="gradient-primary rounded-2xl p-8 mb-8 text-white shadow-lg shadow-blue-500/20">
       <h1 class="text-3xl font-bold mb-1">彩票助手</h1>
@@ -342,29 +342,55 @@ const prizeColor = (level: number) => {
     </div>
 
     <!-- Quick Actions - Fixed Bottom -->
-    <div class="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
-      <div class="grid grid-cols-3 gap-2">
+    <div class="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 py-3 md:hidden">
+      <div class="max-w-xl mx-auto grid grid-cols-3 gap-3">
         <button
           @click="router.push('/purchase')"
-          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer text-sm"
+          class="flex items-center justify-center gap-1.5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer text-sm"
         >
           <ShoppingCart class="w-4 h-4" />
-          <span class="whitespace-nowrap">录入购买</span>
+          <span>录入购买</span>
         </button>
         <button
           @click="router.push('/draw')"
-          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-emerald-500/30 cursor-pointer text-sm"
+          class="flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-500/30 cursor-pointer text-sm"
         >
           <Trophy class="w-4 h-4" />
-          <span class="whitespace-nowrap">录入开奖</span>
+          <span>录入开奖</span>
         </button>
-
         <button
           @click="openLuckyModal"
-          class="flex items-center justify-center gap-1 py-3 md:py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer text-sm"
+          class="flex items-center justify-center gap-1.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer text-sm"
         >
           <Sparkles class="w-4 h-4" />
-          <span class="whitespace-nowrap">幸运号</span>
+          <span>幸运号</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Desktop Quick Actions -->
+    <div class="hidden md:block fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          @click="router.push('/purchase')"
+          class="flex items-center justify-center gap-1.5 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/30 cursor-pointer text-sm"
+        >
+          <ShoppingCart class="w-4 h-4" />
+          <span>录入购买</span>
+        </button>
+        <button
+          @click="router.push('/draw')"
+          class="flex items-center justify-center gap-1.5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-emerald-500/30 cursor-pointer text-sm"
+        >
+          <Trophy class="w-4 h-4" />
+          <span>录入开奖</span>
+        </button>
+        <button
+          @click="openLuckyModal"
+          class="flex items-center justify-center gap-1.5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer text-sm"
+        >
+          <Sparkles class="w-4 h-4" />
+          <span>幸运号</span>
         </button>
       </div>
     </div>
