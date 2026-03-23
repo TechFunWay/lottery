@@ -18,10 +18,36 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # 配置
-VERSION="${1:-v1.0.0}"
-COMPRESS="${2:-false}"
+COMPRESS="${1:-true}"
 PROJECT_NAME="${PROJECT_NAME:-lottery-assistant}"
 BINARY_NAME="${BINARY_NAME:-lottery}"
+
+# 自动获取版本号
+if [ -f "backend/main.go" ]; then
+    # 编译临时程序获取版本
+    TEMP_BUILD_DIR=$(mktemp -d)
+    TEMP_VERSION_OUTPUT="$TEMP_BUILD_DIR/version_temp"
+    cd backend
+    go run main.go -version 2>/dev/null > "$TEMP_VERSION_OUTPUT" 2>&1 || true
+    cd ..
+
+    # 提取版本号
+    if grep -q "Lottery Assistant" "$TEMP_VERSION_OUTPUT"; then
+        VERSION=$(grep "Lottery Assistant" "$TEMP_VERSION_OUTPUT" | awk '{print $3}')
+        BUILD_TIME=$(grep "Build Time:" "$TEMP_VERSION_OUTPUT" | awk '{print $3}')
+    else
+        echo -e "${RED}❌ 无法从 backend/main.go 获取版本号${NC}"
+        echo -e "${YELLOW}请确保 backend/main.go 中的 Version 变量定义正确${NC}"
+        rm -rf "$TEMP_BUILD_DIR"
+        exit 1
+    fi
+
+    rm -rf "$TEMP_BUILD_DIR"
+else
+    echo -e "${RED}❌ 未找到 backend/main.go 文件${NC}"
+    echo -e "${YELLOW}请确保在项目根目录下存在 backend/main.go 文件${NC}"
+    exit 1
+fi
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  跨平台编译${NC}"
@@ -108,13 +134,13 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     fi
 
     # 压缩
-    if [ "$COMPRESS" = "true" ]; then
-        if command -v upx &> /dev/null; then
-            echo -e "${YELLOW}📦 压缩: $OUTPUT_NAME${NC}"
-            upx --best --lzma "$OUTPUT_PATH/$OUTPUT_NAME" 2>/dev/null || true
-        else
-            echo -e "${YELLOW}⚠️  UPX 未安装，跳过压缩${NC}"
-        fi
+    if command -v upx &> /dev/null; then
+        echo -e "${YELLOW}📦 使用 UPX 压缩: $OUTPUT_NAME${NC}"
+        upx --best --lzma "$OUTPUT_PATH/$OUTPUT_NAME" 2>/dev/null || true
+    else
+        echo -e "${YELLOW}ℹ️  UPX 未安装，使用 Go 编译优化${NC}"
+        echo -e "${YELLOW}    编译参数已包含 -s -w -trimpath -buildid= 用于减小体积${NC}"
+        echo -e "${YELLOW}    如需进一步压缩，请安装 UPX: https://upx.github.io/${NC}"
     fi
 
     # 创建版本信息文件

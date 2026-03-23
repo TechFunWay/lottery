@@ -99,9 +99,26 @@ if [ ! -d "$FRONTEND_DIST" ]; then
 fi
 echo -e "${GREEN}✓ 前端资源: $FRONTEND_DIST${NC}"
 
-# 步骤 4: 检查飞牛应用目录
+# 步骤 4: 修改 manifest 版本号
 echo ""
-echo -e "${YELLOW}📦 步骤 4: 检查飞牛应用目录${NC}"
+echo -e "${YELLOW}📦 步骤 4: 修改 manifest 版本号${NC}"
+
+MANIFEST="$FUNNAS_DIR/manifest"
+if [ -f "$MANIFEST" ]; then
+    # 提取版本号中的数字部分（去掉 v 前缀）
+    VERSION_NUM=$(echo "$VERSION" | sed 's/^v//')
+    # 保持格式对齐，使用固定宽度
+    sed "s/^version.*/version               = $VERSION_NUM/" "$MANIFEST" > "$MANIFEST.tmp"
+    mv "$MANIFEST.tmp" "$MANIFEST"
+    echo -e "${GREEN}✓ manifest 版本已更新为 $VERSION_NUM${NC}"
+else
+    echo -e "${RED}❌ 错误: manifest 文件不存在: $MANIFEST${NC}"
+    exit 1
+fi
+
+# 步骤 5: 检查飞牛应用目录
+echo ""
+echo -e "${YELLOW}📦 步骤 5: 检查飞牛应用目录${NC}"
 
 if [ ! -d "$FUNNAS_DIR" ]; then
     echo -e "${RED}❌ 错误: 飞牛应用目录不存在: $FUNNAS_DIR${NC}"
@@ -109,9 +126,9 @@ if [ ! -d "$FUNNAS_DIR" ]; then
 fi
 echo -e "${GREEN}✓ 飞牛应用目录: $FUNNAS_DIR${NC}"
 
-# 步骤 5: 打包每个平台
+# 步骤 6: 打包每个平台
 echo ""
-echo -e "${YELLOW}📦 步骤 5: 打包各平台应用${NC}"
+echo -e "${YELLOW}📦 步骤 6: 打包各平台应用${NC}"
 
 mkdir -p "$RELEASE_DIR"
 
@@ -157,7 +174,7 @@ for BINARY_FILE in "${BINARY_FILES[@]}"; do
         cp -r "$PLATFORM_DIR/lottery-web" "$OUTPUT_DIR/app/www/"
     fi
 
-    # 修改 manifest 中的 platform
+    # 修改 manifest 中的 platform（版本号已在步骤 4 修改）
     MANIFEST="$OUTPUT_DIR/manifest"
     if [ -f "$MANIFEST" ]; then
         sed "s/platform.*/platform=$PLATFORM_TYPE/" "$MANIFEST" > "$MANIFEST.tmp"
