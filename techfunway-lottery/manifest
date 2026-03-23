@@ -1,7 +1,7 @@
 appname               = techfunway-lottery
 version               = 1.0.0
 display_name          = 彩票助手
-desc                  = 彩票助手
+desc                  = 彩票助手，帮助你记录购买记录和投入产出分析
 platform              = x86
 source                = thirdparty
 maintainer            = 科技智趣坊
@@ -10,3 +10,4 @@ distributor           = 科技智趣坊
 distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
+changelog             = 彩票助手更新
