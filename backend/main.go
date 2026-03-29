@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
+	"flag"
+	"fmt"
 	"lottery-backend/database"
 	"lottery-backend/handlers"
 	"lottery-backend/logger"
 	"lottery-backend/middleware"
 	"lottery-backend/services"
-	"flag"
-	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -136,6 +140,12 @@ func main() {
 	sugarLogger.Infof("📄 Database path: %s", config.dbPath)
 	database.InitDB(config.dbPath)
 
+	// 启动使用统计服务
+	usageStatsSvc := services.NewUsageStatsService(Version)
+	usageStatsSvc.SetAPIURL("http://page.wycto.cc/api/test/tongji?appName=lottery&version=" + Version) // 在这里填写你的API地址
+	usageStatsSvc.Start()
+	defer usageStatsSvc.Stop() // 确保服务退出时停止统计服务
+
 	// 执行数据库升级
 	sugarLogger.Info("🔄 Checking database upgrades...")
 	upgradeSvc := services.NewUpgradeService(database.DB, config.dataDir)
@@ -183,11 +193,11 @@ func main() {
 		// 版本信息接口（公开）
 		api.GET("/version", func(c *gin.Context) {
 			c.JSON(200, gin.H{
-				"name":       "Lottery Assistant",
-				"version":    Version,
-				"buildTime":  BuildTime,
-				"gitCommit":  GitCommit,
-				"status":     "running",
+				"name":      "Lottery Assistant",
+				"version":   Version,
+				"buildTime": BuildTime,
+				"gitCommit": GitCommit,
+				"status":    "running",
 			})
 		})
 		// 认证相关（不需要登录）
@@ -274,7 +284,7 @@ func main() {
 			c.File(indexPath)
 		} else {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":  "Frontend not available",
+				"error":   "Frontend not available",
 				"message": fmt.Sprintf("Please place index.html in %s directory", webRoot),
 			})
 		}
@@ -301,7 +311,7 @@ func main() {
 			c.File(indexPath)
 		} else {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":  "Frontend not available",
+				"error":   "Frontend not available",
 				"message": fmt.Sprintf("Please place index.html in %s directory", webRoot),
 			})
 		}
@@ -309,7 +319,37 @@ func main() {
 
 	sugarLogger.Infof("🌐 Server starting on port %s", config.port)
 	sugarLogger.Infof("📌 API endpoint: http://localhost:%s/api", config.port)
-	r.Run(":" + config.port)
+
+	// 创建 HTTP 服务器
+	srv := &http.Server{
+		Addr:    ":" + config.port,
+		Handler: r,
+	}
+
+	// 在 goroutine 中启动服务器
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			sugarLogger.Errorf("Server error: %v", err)
+			os.Exit(1)
+		}
+	}()
+
+	// 等待中断信号以优雅关闭服务器
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	sugarLogger.Info("🛑 Shutting down server...")
+
+	// 设置 5 秒超时以完成当前请求
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		sugarLogger.Errorf("Server forced to shutdown: %v", err)
+	}
+
+	sugarLogger.Info("✅ Server exited")
 }
 
 // zapWriter 实现 io.Writer 接口，用于将 gin 日志写入 zap
