@@ -30,10 +30,11 @@ var (
 
 // 命令行参数
 var (
-	dataDirFlag = flag.String("data-dir", "./data", "Data directory path (default: ./data)")
-	webDirFlag  = flag.String("web-dir", "./", "Frontend web root directory (default: ./)")
-	portFlag    = flag.String("port", "", "Server port (default: 8902)")
-	showVersion = flag.Bool("version", false, "Show version information")
+	dataDirFlag      = flag.String("data-dir", "./data", "Data directory path (default: ./data)")
+	webDirFlag       = flag.String("web-dir", "./", "Frontend web root directory (default: ./)")
+	portFlag         = flag.String("port", "", "Server port (default: 8902)")
+	showVersion      = flag.Bool("version", false, "Show version information")
+	resetAdminPasswd = flag.String("reset-admin-password", "", "Reset admin password (requires db-path or data-dir)")
 )
 
 // 配置信息
@@ -59,10 +60,11 @@ func printHelp() {
 	fmt.Println("  ./lottery [options]")
 	fmt.Println()
 	fmt.Println("Options:")
-	fmt.Println("  -data-dir string      Data directory path (default: ./data)")
-	fmt.Println("  -web-dir string       Frontend web root directory (default: ./)")
-	fmt.Println("  -port string          Server port (default: 8902)")
-	fmt.Println("  -version              Show version information")
+	fmt.Println("  -data-dir string            Data directory path (default: ./data)")
+	fmt.Println("  -web-dir string             Frontend web root directory (default: ./)")
+	fmt.Println("  -port string                Server port (default: 8902)")
+	fmt.Println("  -reset-admin-password string  Reset admin password")
+	fmt.Println("  -version                    Show version information")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
 	fmt.Println("  PORT        Server port (overrides -port)")
@@ -74,6 +76,7 @@ func printHelp() {
 	fmt.Println("  ./lottery -port 9000")
 	fmt.Println("  ./lottery -web-dir /var/lottery/web")
 	fmt.Println("  ./lottery -data-dir /var/lottery/data -web-dir /var/lottery/web")
+	fmt.Println("  ./lottery -reset-admin-password admin123")
 	fmt.Println("  PORT=8080 ./lottery")
 }
 
@@ -128,6 +131,24 @@ func main() {
 	// 初始化数据库
 	sugarLogger.Infof("📄 Database path: %s", config.dbPath)
 	database.InitDB(config.dbPath)
+
+	// 重置管理员密码
+	if *resetAdminPasswd != "" {
+		authService := services.AuthService{}
+		username, err := authService.ResetAdminPassword(*resetAdminPasswd)
+		if err != nil {
+			fmt.Printf("❌ 错误: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("\n========================================\n")
+		fmt.Printf("  管理员密码重置成功\n")
+		fmt.Printf("========================================\n")
+		fmt.Printf("  用户名: %s\n", username)
+		fmt.Printf("  新密码: %s\n", *resetAdminPasswd)
+		fmt.Printf("========================================\n")
+		fmt.Printf("\n请使用新密码登录。\n")
+		return
+	}
 
 	// 启动使用统计服务
 	usageStatsSvc := services.NewUsageStatsService(Version)
