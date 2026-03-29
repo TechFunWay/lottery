@@ -19,7 +19,7 @@ NC='\033[0m'
 
 # 配置
 VERSION="${1:-v1.0.0}"
-IMAGE_NAME="${IMAGE_NAME:-lottery-assistant}"
+IMAGE_NAME="${IMAGE_NAME:-techfunways/lottery}"
 PORT="${PORT:-8902}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 
