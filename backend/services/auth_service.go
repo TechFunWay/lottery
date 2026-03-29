@@ -164,6 +164,27 @@ func (s *AuthService) CheckAdminExists() bool {
 	return count > 0
 }
 
+// ResetAdminPassword 重置管理员密码（用于命令行）
+// 命令行传入的是明文，需要先 MD5 再加盐 MD5（与注册/登录流程一致）
+// 返回管理员用户名和错误信息
+func (s *AuthService) ResetAdminPassword(password string) (string, error) {
+	var admin models.User
+	if err := s.GetDB().Where("role = ?", "admin").First(&admin).Error; err != nil {
+		return "", errors.New("管理员不存在")
+	}
+
+	// 第一步：前端 MD5
+	firstHash := utils.MD5Hash(password)
+	// 第二步：加盐后端 MD5（与前端登录/注册流程一致）
+	hashedPassword := utils.HashPassword(firstHash)
+
+	if err := s.GetDB().Model(&admin).Update("password", hashedPassword).Error; err != nil {
+		return "", err
+	}
+
+	return admin.Username, nil
+}
+
 // UpdateUserPassword 重置用户密码（仅管理员）
 func (s *AuthService) UpdateUserPassword(userID uint, password string) error {
 	fmt.Printf("[DEBUG] UpdateUserPassword: userID=%d, receivedPassword=%s\n", userID, password)
