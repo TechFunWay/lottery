@@ -69,3 +69,5 @@ test-build
 release
 backend/index.html
 backend/lottery-web
+techfunway-lottery/app/server/lottery
+techfunway-lottery/app/www
