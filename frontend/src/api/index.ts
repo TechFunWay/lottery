@@ -162,4 +162,36 @@ export const configApi = {
     api.put('/configs', configs),
 }
 
+// ===== 系统信息 API =====
+export interface VersionInfo {
+  name: string
+  version: string
+  buildTime: string
+  gitCommit: string
+  status: string
+}
+
+export interface UpgradeHistory {
+  id: number
+  version: string
+  name: string
+  status: number
+  startTime: string
+  endTime: string
+  remark: string
+  createdAt: string
+}
+
+export const systemApi = {
+  // 获取版本信息
+  getVersion: (): Promise<VersionInfo> =>
+    api.get('/version'),
+  // 获取当前数据库版本
+  getCurrentVersion: (): Promise<{ version: string }> =>
+    api.get('/version/current'),
+  // 获取升级历史
+  getUpgradeHistory: (): Promise<{ data: UpgradeHistory[] }> =>
+    api.get('/version/history'),
+}
+
 export default api

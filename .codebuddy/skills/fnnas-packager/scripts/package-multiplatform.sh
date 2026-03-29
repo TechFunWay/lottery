@@ -152,8 +152,9 @@ for BINARY_FILE in "${BINARY_FILES[@]}"; do
     rm -rf "$OUTPUT_DIR"
     mkdir -p "$OUTPUT_DIR"
 
-    # 复制基础结构
+    # 复制基础结构（排除 .DS_Store）
     cp -r "$FUNNAS_DIR/"* "$OUTPUT_DIR/"
+    find "$OUTPUT_DIR" -name ".DS_Store" -delete 2>/dev/null || true
 
     # 创建 app/server 目录
     mkdir -p "$OUTPUT_DIR/app/server"
@@ -165,7 +166,7 @@ for BINARY_FILE in "${BINARY_FILES[@]}"; do
     # 创建 app/www 目录
     mkdir -p "$OUTPUT_DIR/app/www"
 
-    # 复制前端资源到 app/www
+    # 复制前端资源到 app/www（排除 .DS_Store）
     # index.html 和 lottery-web 从编译产物复制
     if [ -f "$PLATFORM_DIR/index.html" ]; then
         cp "$PLATFORM_DIR/index.html" "$OUTPUT_DIR/app/www/"
@@ -173,6 +174,9 @@ for BINARY_FILE in "${BINARY_FILES[@]}"; do
     if [ -d "$PLATFORM_DIR/lottery-web" ]; then
         cp -r "$PLATFORM_DIR/lottery-web" "$OUTPUT_DIR/app/www/"
     fi
+
+    # 删除前端资源中的 .DS_Store
+    find "$OUTPUT_DIR" -name ".DS_Store" -delete 2>/dev/null || true
 
     # 修改 manifest 中的 platform（版本号已在步骤 4 修改）
     MANIFEST="$OUTPUT_DIR/manifest"
