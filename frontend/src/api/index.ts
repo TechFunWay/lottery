@@ -42,7 +42,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    if (error.response?.status === 401) {
+    // 如果是登录接口失败，不跳转（让调用者处理错误显示）
+    const isLoginRequest = error.config?.url?.includes('/auth/login')
+    if (error.response?.status === 401 && !isLoginRequest) {
       // 清除token并跳转到登录页
       localStorage.removeItem('token')
       localStorage.removeItem('user')

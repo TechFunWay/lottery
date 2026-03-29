@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { authApi, configApi } from '../api'
 import { hashPassword } from '../utils/crypto'
-import { User, Lock, ArrowRight, Gift, Mail } from 'lucide-vue-next'
+import { User, Lock, ArrowRight, Gift, Mail, AlertCircle } from 'lucide-vue-next'
 
 const router = useRouter()
 const route = useRoute()
@@ -101,6 +101,7 @@ const handleLogin = async () => {
     router.push(redirect)
   } catch (err: any) {
     loginError.value = err.response?.data?.error || '登录失败，请检查用户名和密码'
+    return
   } finally {
     loading.value = false
   }
@@ -131,6 +132,7 @@ const handleRegister = async () => {
     setTimeout(() => router.push('/'), 1500)
   } catch (err: any) {
     registerError.value = err.response?.data?.error || '注册失败，请重试'
+    return
   } finally {
     loading.value = false
   }
@@ -172,8 +174,10 @@ const switchToLogin = () => {
       <div v-if="!isRegisterMode" class="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8">
         <h2 class="text-2xl font-bold text-slate-800 mb-6">登录</h2>
 
-        <div v-if="loginError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-          {{ loginError }}
+        <!-- 错误提示 - 醒目样式 -->
+        <div v-if="loginError" class="mb-4 p-4 bg-red-100 border-2 border-red-400 rounded-xl text-red-700 text-base font-medium flex items-center gap-3 animate-shake">
+          <AlertCircle class="w-5 h-5 flex-shrink-0" />
+          <span>{{ loginError }}</span>
         </div>
 
         <!-- 用户名 -->
@@ -258,8 +262,10 @@ const switchToLogin = () => {
         </div>
 
         <template v-else>
-          <div v-if="registerError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-            {{ registerError }}
+          <!-- 错误提示 - 醒目样式 -->
+          <div v-if="registerError" class="mb-4 p-4 bg-red-100 border-2 border-red-400 rounded-xl text-red-700 text-base font-medium flex items-center gap-3 animate-shake">
+            <AlertCircle class="w-5 h-5 flex-shrink-0" />
+            <span>{{ registerError }}</span>
           </div>
 
           <!-- 用户名 -->
@@ -332,3 +338,16 @@ const switchToLogin = () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 错误提示抖动动画 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+</style>
