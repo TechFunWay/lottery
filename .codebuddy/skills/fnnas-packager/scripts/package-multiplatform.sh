@@ -228,4 +228,32 @@ echo ""
 echo -e "${BLUE}生成的 .fpk 文件:${NC}"
 ls -lh "$RELEASE_DIR/$VERSION"/*.fpk 2>/dev/null || echo "  (未找到 .fpk 文件)"
 echo ""
+
+# 同步最新编译产物到飞牛应用目录
+echo ""
+echo -e "${YELLOW}📦 同步编译产物到飞牛应用目录${NC}"
+
+# 创建目录
+mkdir -p "$FUNNAS_DIR/app/server"
+mkdir -p "$FUNNAS_DIR/app/www"
+
+# 复制 linux-amd64 版本到飞牛应用目录（作为默认版本）
+if [ -f "$RELEASE_DIR/$VERSION/lottery-assistant-$VERSION-linux-amd64/lottery" ]; then
+    cp "$RELEASE_DIR/$VERSION/lottery-assistant-$VERSION-linux-amd64/lottery" "$FUNNAS_DIR/app/server/lottery"
+    chmod +x "$FUNNAS_DIR/app/server/lottery"
+    echo -e "${GREEN}✓ 已同步 lottery 到 $FUNNAS_DIR/app/server/${NC}"
+fi
+
+if [ -f "$RELEASE_DIR/$VERSION/lottery-assistant-$VERSION-linux-amd64/index.html" ]; then
+    cp "$RELEASE_DIR/$VERSION/lottery-assistant-$VERSION-linux-amd64/index.html" "$FUNNAS_DIR/app/www/index.html"
+    echo -e "${GREEN}✓ 已同步 index.html 到 $FUNNAS_DIR/app/www/${NC}"
+fi
+
+if [ -d "$RELEASE_DIR/$VERSION/lottery-assistant-$VERSION-linux-amd64/lottery-web" ]; then
+    rm -rf "$FUNNAS_DIR/app/www/lottery-web"
+    cp -r "$RELEASE_DIR/$VERSION/lottery-assistant-$VERSION-linux-amd64/lottery-web" "$FUNNAS_DIR/app/www/"
+    echo -e "${GREEN}✓ 已同步 lottery-web 到 $FUNNAS_DIR/app/www/${NC}"
+fi
+
+echo ""
 echo -e "${GREEN}========================================${NC}"
