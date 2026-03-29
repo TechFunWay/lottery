@@ -2,8 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound } from 'lucide-vue-next'
-import type { User } from '../types'
-import { authApi } from '../api'
+import type { User, VersionInfo } from '../types'
+import { authApi, systemApi } from '../api'
 import { hashPassword } from '../utils/crypto'
 
 const route = useRoute()
@@ -12,6 +12,7 @@ const menuOpen = ref(false)
 const currentUser = ref<User | null>(null)
 const showUserMenu = ref(false)
 const showPasswordModal = ref(false)
+const versionInfo = ref<VersionInfo | null>(null)
 const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -103,6 +104,24 @@ const loadUser = () => {
   currentUser.value = userStr ? JSON.parse(userStr) : null
 }
 
+// 加载版本信息
+const loadVersionInfo = async () => {
+  try {
+    const data = await systemApi.getVersion()
+    versionInfo.value = data
+  } catch (err) {
+    console.error('Failed to load version info:', err)
+    // 如果API调用失败，设置默认版本信息
+    versionInfo.value = {
+      name: '彩票助手',
+      version: 'v1.0.0',
+      buildTime: 'unknown',
+      gitCommit: 'unknown',
+      status: 'running'
+    }
+  }
+}
+
 // 每次路由变化都重新同步登录状态
 watch(() => route.path, () => {
   loadUser()
@@ -119,6 +138,7 @@ const handleClickOutside = (e: MouseEvent) => {
 
 onMounted(() => {
   loadUser()
+  loadVersionInfo()
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -136,9 +156,14 @@ onUnmounted(() => {
           <div class="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-lg shadow-blue-500/30">
             <Gift class="w-5 h-5 text-white" />
           </div>
-          <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
-            彩票助手
-          </span>
+          <div class="flex flex-col">
+            <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
+              彩票助手
+            </span>
+            <span class="text-xs text-slate-500" v-if="versionInfo">
+              {{ versionInfo.version }}
+            </span>
+          </div>
         </div>
 
         <!-- Desktop Navigation -->
@@ -393,4 +418,6 @@ onUnmounted(() => {
       </div>
     </div>
   </teleport>
+
+
 </template>

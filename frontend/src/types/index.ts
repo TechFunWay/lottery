@@ -174,3 +174,24 @@ export const LOTTERY_CONFIGS: LotteryConfig[] = [
     description: '6个红球(0-9) + 1个蓝球(0-9)'
   }
 ]
+
+// 系统版本信息
+export interface VersionInfo {
+  name: string
+  version: string
+  buildTime: string
+  gitCommit: string
+  status: string
+}
+
+// 系统升级记录
+export interface SystemUpgrade {
+  id: number
+  version: string
+  name: string
+  status: number
+  startTime: string
+  endTime: string
+  remark: string
+  createdAt: string
+}

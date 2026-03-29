@@ -30,8 +30,8 @@ var (
 
 // 命令行参数
 var (
-	dataDirFlag = flag.String("dataUrl", "./data", "Data directory path (default: ./data)")
-	webDirFlag  = flag.String("webDir", "./", "Frontend web root directory containing index.html and lottery-web folder (default: ./)")
+	dataDirFlag = flag.String("data-dir", "./data", "Data directory path (default: ./data)")
+	webDirFlag  = flag.String("web-dir", "./", "Frontend web root directory (default: ./)")
 	portFlag    = flag.String("port", "", "Server port (default: 8902)")
 	showVersion = flag.Bool("version", false, "Show version information")
 )
@@ -58,19 +58,11 @@ func printHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  ./lottery [options]")
 	fmt.Println()
-	fmt.Println("Frontend Files:")
-	fmt.Println("  index.html   - Should be placed in webRoot directory (default: ./)")
-	fmt.Println("  lottery-web/ - Static resources directory in webRoot")
-	fmt.Println()
 	fmt.Println("Options:")
-	fmt.Println("  -dataUrl string")
-	fmt.Println("        Data directory path (default: ./data)")
-	fmt.Println("  -webDir string")
-	fmt.Println("        Frontend web root directory containing index.html and lottery-web (default: ./)")
-	fmt.Println("  -port string")
-	fmt.Println("        Server port (default: 8902)")
-	fmt.Println("  -version")
-	fmt.Println("        Show version information")
+	fmt.Println("  -data-dir string      Data directory path (default: ./data)")
+	fmt.Println("  -web-dir string       Frontend web root directory (default: ./)")
+	fmt.Println("  -port string          Server port (default: 8902)")
+	fmt.Println("  -version              Show version information")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
 	fmt.Println("  PORT        Server port (overrides -port)")
@@ -80,23 +72,20 @@ func printHelp() {
 	fmt.Println("Examples:")
 	fmt.Println("  ./lottery")
 	fmt.Println("  ./lottery -port 9000")
-	fmt.Println("  ./lottery -webDir /var/lottery/web")
-	fmt.Println("  ./lottery -dataUrl /var/lottery/data -webDir /var/lottery/web")
+	fmt.Println("  ./lottery -web-dir /var/lottery/web")
+	fmt.Println("  ./lottery -data-dir /var/lottery/data -web-dir /var/lottery/web")
 	fmt.Println("  PORT=8080 ./lottery")
 }
 
 func main() {
+	// 设置自定义帮助函数
+	flag.Usage = printHelp
+
 	flag.Parse()
 
 	// 显示版本信息
 	if *showVersion {
 		printVersion()
-		return
-	}
-
-	// 检查是否需要显示帮助
-	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		printHelp()
 		return
 	}
 
@@ -142,7 +131,16 @@ func main() {
 
 	// 启动使用统计服务
 	usageStatsSvc := services.NewUsageStatsService(Version)
-	usageStatsSvc.SetAPIURL("http://page.wycto.cc/api/test/tongji?appName=lottery&version=" + Version) // 在这里填写你的API地址
+	usageStatsSvc.SetAppName("lottery")
+	usageStatsSvc.SetAPIURL("http://page.wycto.cc/api/apps.online/refresh")
+
+	// 初始化设备标识码
+	if err := usageStatsSvc.InitDeviceID(config.dataDir); err != nil {
+		sugarLogger.Warnf("⚠️  无法获取设备标识码: %v", err)
+	} else {
+		sugarLogger.Infof("📱 设备标识码: %s", usageStatsSvc.GetDeviceID())
+	}
+
 	usageStatsSvc.Start()
 	defer usageStatsSvc.Stop() // 确保服务退出时停止统计服务
 
@@ -191,15 +189,18 @@ func main() {
 	api := r.Group("/api")
 	{
 		// 版本信息接口（公开）
+		// 传递版本信息给处理函数
 		api.GET("/version", func(c *gin.Context) {
 			c.JSON(200, gin.H{
-				"name":      "Lottery Assistant",
+				"name":      "彩票助手",
 				"version":   Version,
 				"buildTime": BuildTime,
 				"gitCommit": GitCommit,
 				"status":    "running",
 			})
 		})
+		api.GET("/version/current", handlers.GetCurrentVersion)
+		api.GET("/version/history", handlers.GetUpgradeHistory)
 		// 认证相关（不需要登录）
 		auth := api.Group("/auth")
 		{

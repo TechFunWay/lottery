@@ -2,6 +2,8 @@
 
 一个帮助您记录彩票购买、自动识别中奖情况、并提供全面统计分析的系统。
 
+**注意**: 本应用包含匿名使用统计功能，会收集设备标识码用于统计独立设备数量。详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
+
 ## 功能特性
 
 - **多用户系统**：支持用户注册、登录、权限管理
@@ -49,23 +51,91 @@ caipiao/
 
 ## 快速开始
 
-### 首次使用（系统初始化）
+### 自动化构建系统（推荐）
+
+项目提供了完整的自动化构建系统，支持开发环境和发布环境的构建。
+
+#### 开发环境（一键启动）
+
+```bash
+# 方法1: 使用 Makefile（完整流程）
+make dev
+
+# 方法2: 使用启动脚本
+./start.sh dev
+
+# 方法3: 使用环境变量自定义
+PORT=8080 DATA_DIR=/path/to/data make dev
+```
+
+这会自动：
+1. 构建前端（Vue 3 + TypeScript）
+2. 构建后端（Go）
+3. 启动服务（默认端口 8902）
+
+访问地址：`http://localhost:8902`
+
+#### 发布环境（多平台打包）
+
+```bash
+# 方法1: 使用 Makefile
+make release
+
+# 方法2: 使用启动脚本
+./start.sh release
+```
+
+这会自动：
+1. 构建前端
+2. 跨平台编译（macOS, Linux, Windows）
+3. 打包飞牛 NAS 应用（.fpk 文件）
+
+#### 更多命令
+
+```bash
+# 显示所有可用命令
+make help
+./start.sh help
+
+# 仅构建前端
+make dev-frontend
+
+# 仅构建后端
+make dev-backend
+
+# 仅运行服务（不构建）
+make run
+
+# 清理构建产物
+make clean
+./start.sh clean
+
+# 检查依赖
+make check-deps
+
+# 显示版本信息
+make version
+```
+
+### 传统方式（手动启动）
+
+#### 首次使用（系统初始化）
 
 1. 启动后端服务
 ```bash
 cd backend
-go run -tags=dev main.go
+go run main.go
 ```
 
 2. 启动前端服务
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build
 ```
 
 3. 访问应用
-打开浏览器访问 `http://localhost:5173`
+打开浏览器访问 `http://localhost:8902`
 
 4. 注册管理员账号
 首次访问时，系统会检测到没有管理员用户，显示"注册管理员账号"选项。注册第一个用户，该用户将自动成为管理员。
@@ -115,6 +185,9 @@ ENV=development go run -tags=dev main.go
 
 # 生产环境
 ENV=production go run -tags=dev main.go
+
+# 禁用使用统计（可选）
+DISABLE_STATS=true go run -tags=dev main.go
 ```
 
 ### 启动前端服务
@@ -290,6 +363,7 @@ data/
 | 数据目录 | `-data-dir` | - | ./data |
 | 数据库路径 | - | `DB_PATH` | ./data/db/database.db |
 | 环境 | - | `ENV` | production |
+| 使用统计 | - | `DISABLE_STATS` | false (启用) |
 
 **示例：**
 ```bash
@@ -327,6 +401,59 @@ grep ERROR data/logs/app.log
 # 查看特定日期的日志
 cat data/logs/app-2024-03-20.log
 ```
+
+## 使用统计与隐私
+
+### 统计功能说明
+
+彩票助手应用包含匿名使用统计功能，用于帮助开发者了解：
+
+1. **设备统计** - 统计独立设备数量
+2. **版本分布** - 了解不同版本的使用情况
+3. **平台统计** - 了解不同操作系统和架构的用户分布
+
+### 收集的数据
+
+统计会收集以下匿名数据：
+
+1. **设备标识码** - 基于系统信息生成的唯一标识符（MD5哈希）
+2. **系统信息** - 操作系统类型、架构、主机名
+3. **应用信息** - 应用版本号
+
+**注意**：不收集任何个人身份信息、购买记录、中奖信息等敏感数据。
+
+### 设备标识码生成原理
+
+设备标识码基于以下系统信息生成：
+- 操作系统类型和架构
+- 主机名（如果可获取）
+- 系统硬件信息（根据不同平台）
+
+生成的标识码使用 MD5 哈希算法，无法反向推导原始信息。
+
+### 如何禁用统计
+
+```bash
+# 方法1: 使用环境变量
+DISABLE_STATS=true ./lottery
+
+# 方法2: 使用 Makefile
+DISABLE_STATS=true make dev
+
+# 方法3: 使用启动脚本
+DISABLE_STATS=true ./start.sh dev
+```
+
+### 查看设备标识码
+
+应用启动时会显示设备标识码，格式为 32 位十六进制字符串：
+```
+📱 设备标识码: 5d41402abc4b2a76b9719d911017c592
+```
+
+设备标识码存储在本地 `./data/device_id.txt` 文件中。
+
+详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
 
 ## License
 
