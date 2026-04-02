@@ -72,3 +72,5 @@ backend/lottery-web
 techfunway-lottery/app/server/lottery
 techfunway-lottery/app/www
 lottery-web
+index.html
+lottery
