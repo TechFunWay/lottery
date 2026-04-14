@@ -1,6 +1,6 @@
 # 飞牛 NAS 应用打包 Skill
 
-将彩票助手项目打包成飞牛 NAS 应用（FunNAS App）。
+将彩彩助手项目打包成飞牛 NAS 应用（FunNAS App）。
 
 ## 功能特性
 

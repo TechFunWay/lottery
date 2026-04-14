@@ -2,7 +2,7 @@
 
 ## 功能说明
 
-这个 Skill 用于将彩票助手项目打包成飞牛 NAS 应用（FunNAS App）。
+这个 Skill 用于将彩彩助手项目打包成飞牛 NAS 应用（FunNAS App）。
 
 ## 使用场景
 
@@ -121,7 +121,7 @@ techfunway-lottery/
 应用清单文件，包含应用元信息：
 
 ```
-Name: 彩票助手
+Name: 彩彩助手
 Version: 1.0.0
 Description: 彩票选号、购买、管理助手
 Author: TechFunWay

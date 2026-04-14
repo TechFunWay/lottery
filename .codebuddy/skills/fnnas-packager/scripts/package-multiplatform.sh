@@ -172,6 +172,8 @@ for BINARY_FILE in "${BINARY_FILES[@]}"; do
         cp "$PLATFORM_DIR/index.html" "$OUTPUT_DIR/app/www/"
     fi
     if [ -d "$PLATFORM_DIR/lottery-web" ]; then
+        # 先清理目标目录，确保没有旧文件残留
+        rm -rf "$OUTPUT_DIR/app/www/lottery-web"
         cp -r "$PLATFORM_DIR/lottery-web" "$OUTPUT_DIR/app/www/"
     fi
 
