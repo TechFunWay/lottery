@@ -162,7 +162,7 @@ cd /Users/weiyi/develop/gitee/TechFunWay/lottery
 **弹窗内容:**
 ```
 系统版本信息
-├─ 应用名称: 彩票助手
+├─ 应用名称: 彩彩助手
 ├─ 版本号: v1.0.0
 ├─ 构建时间: 2026-03-29T02:45:36Z
 ├─ Git提交: 6ae11cd
