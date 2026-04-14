@@ -113,7 +113,7 @@ const loadVersionInfo = async () => {
     console.error('Failed to load version info:', err)
     // 如果API调用失败，设置默认版本信息
     versionInfo.value = {
-      name: '彩票助手',
+      name: '彩彩助手',
       version: 'v1.0.0',
       buildTime: 'unknown',
       gitCommit: 'unknown',
@@ -158,7 +158,7 @@ onUnmounted(() => {
           </div>
           <div class="flex flex-col">
             <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
-              彩票助手
+              彩彩助手
             </span>
             <span class="text-xs text-slate-500" v-if="versionInfo">
               {{ versionInfo.version }}

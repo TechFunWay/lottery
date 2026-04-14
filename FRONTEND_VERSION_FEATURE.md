@@ -1,4 +1,4 @@
-# 彩票助手 - 前端版本号显示功能
+# 彩彩助手 - 前端版本号显示功能
 
 ## ✅ 功能已实现
 
@@ -11,7 +11,7 @@
 ### 2. **版本信息弹窗** ✅
 - **触发**: 点击导航栏版本号旁边的信息图标
 - **内容**:
-  - 应用名称: "彩票助手"
+  - 应用名称: "彩彩助手"
   - 版本号: `v1.0.0` (突出显示)
   - 构建时间: 从后端API获取
   - Git提交: 从后端API获取
@@ -24,7 +24,7 @@
 <!-- Logo和版本号区域 -->
 <div class="flex flex-col">
   <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
-    彩票助手
+    彩彩助手
   </span>
   <div class="flex items-center gap-1">
     <span class="text-xs text-slate-500" v-if="versionInfo">
@@ -67,7 +67,7 @@ const loadVersionInfo = async () => {
     console.error('Failed to load version info:', err)
     // 降级处理：设置默认版本信息
     versionInfo.value = {
-      name: '彩票助手',
+      name: '彩彩助手',
       version: 'v1.0.0',
       buildTime: 'unknown',
       gitCommit: 'unknown',
@@ -156,7 +156,7 @@ cd /Users/weiyi/develop/gitee/TechFunWay/lottery
 
 **导航栏显示:**
 ```
-🎁 彩票助手 v1.0.0 ⓘ
+🎁 彩彩助手 v1.0.0 ⓘ
 ```
 
 **弹窗内容:**
