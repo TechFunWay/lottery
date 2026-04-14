@@ -213,7 +213,7 @@ const prizeColor = (level: number) => {
   <div class="animate-fade-in min-h-screen flex flex-col pb-20 md:pb-24">
     <!-- Hero Section -->
     <div class="gradient-primary rounded-2xl p-8 mb-8 text-white shadow-lg shadow-blue-500/20">
-      <h1 class="text-3xl font-bold mb-1">彩票助手</h1>
+      <h1 class="text-3xl font-bold mb-1">彩彩助手</h1>
       <p class="text-blue-100 text-sm mb-6">记录每一次幸运，分析每一次投注</p>
       <div class="flex items-end gap-4">
         <div class="text-blue-100 text-sm pb-1 shrink-0">总盈亏</div>

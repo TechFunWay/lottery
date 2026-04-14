@@ -54,7 +54,7 @@ func printVersion() {
 }
 
 func printHelp() {
-	fmt.Println("Lottery Assistant - 彩票助手管理系统")
+	fmt.Println("Lottery Assistant - 彩彩助手管理系统")
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  ./lottery [options]")
@@ -213,7 +213,7 @@ func main() {
 		// 传递版本信息给处理函数
 		api.GET("/version", func(c *gin.Context) {
 			c.JSON(200, gin.H{
-				"name":      "彩票助手",
+				"name":      "彩彩助手",
 				"version":   Version,
 				"buildTime": BuildTime,
 				"gitCommit": GitCommit,

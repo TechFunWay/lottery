@@ -165,7 +165,7 @@ const switchToLogin = () => {
           <Gift class="w-10 h-10 text-white" />
         </div>
         <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
-          彩票助手
+          彩彩助手
         </h1>
         <p class="text-slate-500 mt-2">{{ isRegisterMode ? (adminExists ? '创建新账号' : '创建管理员账号') : '欢迎回来' }}</p>
       </div>
