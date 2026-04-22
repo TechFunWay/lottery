@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound } from 'lucide-vue-next'
+import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound, Zap, ExternalLink } from 'lucide-vue-next'
 import type { User, VersionInfo } from '../types'
 import { authApi, systemApi } from '../api'
 import { hashPassword } from '../utils/crypto'
@@ -30,11 +30,15 @@ const navItems = [
   { name: '中奖记录', path: '/winnings', icon: Gift },
   { name: '历史命中', path: '/history-hit', icon: Target },
   { name: '统计分析', path: '/statistics', icon: BarChart3 },
+  { name: '竞彩足球', path: '/football', icon: Zap },
 ]
 
 const adminItems = []
 
-const isActive = (path: string) => route.path === path
+const isActive = (path: string) => {
+  if (path === '/') return route.path === '/'
+  return route.path === path || route.path.startsWith(path + '/')
+}
 
 const toggleMenu = () => {
   menuOpen.value = !menuOpen.value
@@ -181,6 +185,16 @@ onUnmounted(() => {
             {{ item.name }}
           </router-link>
 
+          <a
+            href="http://techfunway.wycto.cn/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all duration-200"
+          >
+            <ExternalLink class="w-4 h-4" />
+            支持
+          </a>
+
           <!-- User menu / Login button -->
           <div v-if="isLoggedIn" class="relative ml-2 user-menu-wrapper">
             <button
@@ -277,6 +291,17 @@ onUnmounted(() => {
             <component :is="item.icon" class="w-5 h-5" />
             {{ item.name }}
           </router-link>
+
+          <a
+            href="http://techfunway.wycto.cn/"
+            target="_blank"
+            rel="noopener noreferrer"
+            @click="closeMenu"
+            class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200"
+          >
+            <ExternalLink class="w-5 h-5" />
+            支持
+          </a>
 
           <!-- Login/Logout -->
           <div v-if="isLoggedIn" class="border-t border-slate-100 pt-3">

@@ -10,7 +10,8 @@
 
 # 项目配置
 PROJECT_NAME := lottery-assistant
-BINARY_NAME := lottery
+DEVELOP_DIR := develop
+BINARY_NAME := develop/lottery
 FRONTEND_DIR := frontend
 BACKEND_DIR := backend
 RELEASE_DIR := release
@@ -41,7 +42,7 @@ help:
 	@echo -e "$(GREEN)环境变量:$(NC)"
 	@echo "  PORT=8902     - 设置服务端口（默认：8902）"
 	@echo "  DATA_DIR=./data - 设置数据目录（默认：./data）"
-	@echo "  WEB_DIR=./    - 设置前端目录（默认：./）"
+	@echo "  WEB_DIR=./    - 设置前端目录（默认：./develop）"
 	@echo ""
 	@echo -e "$(GREEN)当前版本:$(NC) $(VERSION)"
 	@echo ""
@@ -70,10 +71,10 @@ copy-frontend:
 	@echo -e "$(BLUE)========================================$(NC)"
 	@if [ -d "$(FRONTEND_DIR)/dist" ]; then \
 		echo -e "$(BLUE)📁 复制前端文件到项目根目录...$(NC)"; \
-		cp -f "$(FRONTEND_DIR)/dist/index.html" "./index.html"; \
+		cp -f "$(FRONTEND_DIR)/dist/index.html" "$(DEVELOP_DIR)/index.html"; \
 		if [ -d "$(FRONTEND_DIR)/dist/lottery-web" ]; then \
 			rm -rf "./lottery-web"; \
-			cp -r "$(FRONTEND_DIR)/dist/lottery-web" "./"; \
+			cp -r "$(FRONTEND_DIR)/dist/lottery-web" "$(DEVELOP_DIR)/"; \
 		fi; \
 		echo -e "$(GREEN)✅ 前端文件复制完成$(NC)"; \
 	else \
@@ -101,18 +102,32 @@ dev-run:
 		echo -e "$(YELLOW)⚠️  $(BINARY_NAME) 不存在，正在构建...$(NC)"; \
 		$(MAKE) dev-backend; \
 	fi
-	@if [ ! -f "./index.html" ] || [ ! -d "./lottery-web" ]; then \
+	@if [ ! -f "$(DEVELOP_DIR)/index.html" ] || [ ! -d "$(DEVELOP_DIR)/lottery-web" ]; then \
 		echo -e "$(YELLOW)⚠️  前端文件不存在，正在复制...$(NC)"; \
 		$(MAKE) copy-frontend; \
 	fi
 	@echo -e "$(GREEN)🚀 启动 Lottery Assistant...$(NC)"
 	@echo -e "$(YELLOW)访问地址: http://localhost:8902$(NC)"
 	@echo -e "$(YELLOW)API地址: http://localhost:8902/api$(NC)"
-	@echo -e "$(YELLOW)按 Ctrl+C 停止服务$(NC)"
 	@echo ""
-	@PORT=$${PORT:-8902} DATA_DIR=$${DATA_DIR:-./data} WEB_DIR=$${WEB_DIR:-./} nohup ./$(BINARY_NAME) > /dev/null 2>&1 &
-	@sleep 1
-	@echo -e "$(GREEN)✅ 服务已在后台启动$(NC)"
+	@EXISTING_PID=$$(lsof -ti:$${PORT:-8902} 2>/dev/null); \
+	if [ -n "$$EXISTING_PID" ]; then \
+		echo -e "$(YELLOW)⚠️  端口 $${PORT:-8902} 已被占用 (PID: $$EXISTING_PID)，正在停止旧进程...$(NC)"; \
+		kill $$EXISTING_PID 2>/dev/null; \
+		sleep 1; \
+		echo -e "$(GREEN)✅ 旧进程已停止$(NC)"; \
+	fi
+	@echo -e "$(GREEN)🚀 启动新服务...$(NC)"
+	@PORT=$${PORT:-8902} DATA_DIR=$${DATA_DIR:-$(DEVELOP_DIR)/data} ./$(BINARY_NAME) -web-dir $(DEVELOP_DIR) >> $(DEVELOP_DIR)/lottery.log 2>&1 &
+	@sleep 2
+	@if lsof -ti:$${PORT:-8902} > /dev/null 2>&1; then \
+		echo -e "$(GREEN)✅ 服务启动成功$(NC)"; \
+		echo -e "$(YELLOW)日志文件: $(DEVELOP_DIR)/lottery.log$(NC)"; \
+		echo -e "$(YELLOW)按 Ctrl+C 停止服务$(NC)"; \
+	else \
+		echo -e "$(RED)❌ 服务启动失败，请查看日志: $(DEVELOP_DIR)/lottery.log$(NC)"; \
+		exit 1; \
+	fi
 
 # 发布环境：完整流程
 release:
@@ -294,7 +309,7 @@ run:
 	@echo -e "$(YELLOW)访问地址: http://localhost:8902$(NC)"
 	@echo -e "$(YELLOW)按 Ctrl+C 停止服务$(NC)"
 	@echo ""
-	@PORT=$${PORT:-8902} DATA_DIR=$${DATA_DIR:-./data} WEB_DIR=$${WEB_DIR:-./} ./$(BINARY_NAME)
+	@PORT=$${PORT:-8902} DATA_DIR=$${DATA_DIR:-./data} ./$(BINARY_NAME) -web-dir $(DEVELOP_DIR)
 
 # 停止后台服务
 stop:

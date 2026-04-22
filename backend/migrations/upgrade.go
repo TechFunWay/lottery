@@ -21,6 +21,10 @@ var UpgradeScripts = map[string]UpgradeScript{
 		Name: "初始化数据库",
 		Func: upgrade_v1_0_0,
 	},
+	"v1.1.0": {
+		Name: "竞彩足球功能",
+		Func: upgrade_v1_1_0,
+	},
 }
 
 // upgrade_v1_0_0 初始化数据库（当前版本）
@@ -50,5 +54,15 @@ func upgrade_v1_0_0(db *gorm.DB) error {
 		}
 	}
 
+	return nil
+}
+
+func upgrade_v1_1_0(db *gorm.DB) error {
+	if err := db.AutoMigrate(
+		&models.FootballMatch{},
+		&models.FootballBet{},
+	); err != nil {
+		return err
+	}
 	return nil
 }

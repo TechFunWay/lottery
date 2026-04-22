@@ -46,6 +46,24 @@ const router = createRouter({
       meta: { title: '统计分析', requiresAuth: true }
     },
     {
+      path: '/football',
+      name: 'football',
+      component: () => import('../views/FootballView.vue'),
+      meta: { title: '竞彩足球', requiresAuth: true }
+    },
+    {
+      path: '/football/matches',
+      name: 'football-matches',
+      component: () => import('../views/FootballMatchView.vue'),
+      meta: { title: '比赛管理', requiresAuth: true }
+    },
+    {
+      path: '/football/bets',
+      name: 'football-bets',
+      component: () => import('../views/FootballBetView.vue'),
+      meta: { title: '投注记录', requiresAuth: true }
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: () => import('../views/UserManageView.vue'),

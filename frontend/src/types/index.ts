@@ -195,3 +195,102 @@ export interface SystemUpgrade {
   remark: string
   createdAt: string
 }
+
+// ===== 竞彩足球类型 =====
+
+export type FootballPlayType = '胜平负' | '让球胜平负' | '比分' | '总进球' | '半全场'
+export type FootballMatchStatus = '未开赛' | '进行中' | '已完赛' | '已取消' | '延期'
+export type FootballBetType = '单关' | '2串1' | '3串1' | '4串1' | '5串1' | '6串1' | '7串1' | '8串1'
+export type FootballBetStatus = '待开奖' | '已中奖' | '未中奖' | '部分中奖'
+
+export interface FootballMatch {
+  id: number
+  match_id: string
+  issue_number: string
+  league: string
+  home_team: string
+  away_team: string
+  match_time: string
+  status: FootballMatchStatus
+  home_score: number
+  away_score: number
+  half_home_score: number
+  half_away_score: number
+  handicap: number
+  source: 'manual' | 'auto'
+  created_at: string
+  updated_at: string
+}
+
+export interface FootballSelection {
+  match_id: string
+  play_type: FootballPlayType
+  selection: string
+  odds: number
+  handicap?: number
+}
+
+export interface FootballBet {
+  id: number
+  user_id: number
+  bet_type: FootballBetType
+  amount: number
+  multiple: number
+  status: FootballBetStatus
+  selections: string
+  remark: string
+  win_amount: number
+  created_at: string
+  updated_at: string
+}
+
+export interface FootballOverview {
+  total_bets: number
+  total_amount: number
+  total_win: number
+  net_profit: number
+  win_count: number
+  win_rate: number
+}
+
+export const FOOTBALL_PLAY_TYPES: { type: FootballPlayType; name: string; options: string[] }[] = [
+  {
+    type: '胜平负',
+    name: '胜平负',
+    options: ['3', '1', '0']
+  },
+  {
+    type: '让球胜平负',
+    name: '让球胜平负',
+    options: ['3', '1', '0']
+  },
+  {
+    type: '比分',
+    name: '比分',
+    options: [
+      '1:0', '2:0', '2:1', '3:0', '3:1', '3:2',
+      '4:0', '4:1', '4:2', '5:0', '5:1', '5:2',
+      '0:1', '0:2', '1:2', '0:3', '1:3', '2:3',
+      '0:4', '1:4', '2:4', '0:5', '1:5', '2:5',
+      '0:0', '1:1', '2:2', '3:3', '胜其他', '平其他', '负其他'
+    ]
+  },
+  {
+    type: '总进球',
+    name: '总进球',
+    options: ['0', '1', '2', '3', '4', '5', '6', '7+']
+  },
+  {
+    type: '半全场',
+    name: '半全场',
+    options: ['胜胜', '胜平', '胜负', '平胜', '平平', '平负', '负胜', '负平', '负负']
+  }
+]
+
+export const FOOTBALL_BET_TYPES: FootballBetType[] = ['单关', '2串1', '3串1', '4串1', '5串1', '6串1', '7串1', '8串1']
+
+export const WDL_LABELS: Record<string, string> = {
+  '3': '主胜',
+  '1': '平',
+  '0': '客胜'
+}
