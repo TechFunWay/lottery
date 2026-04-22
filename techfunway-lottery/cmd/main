@@ -4,7 +4,7 @@ LOG_FILE="${TRIM_DATA_SHARE_PATHS}/info.log"
 PID_FILE="${TRIM_DATA_SHARE_PATHS}/app.pid"
 
 # write the command to start your program here 
-CMD="cd ${TRIM_APPDEST}/server/ && ${TRIM_APPDEST}/server/lottery -port=${wizard_app_port} -data-dir=${TRIM_DATA_SHARE_PATHS}/ -web-dir=${TRIM_APPDEST}/www"
+CMD="cd ${TRIM_APPDEST}/server/ && ${TRIM_APPDEST}/server/lottery -port=${wizard_app_port} -data-dir=${TRIM_DATA_SHARE_PATHS}/ -web-dir=${TRIM_APPDEST}/www -device-type fnos"
 
 log_msg() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}

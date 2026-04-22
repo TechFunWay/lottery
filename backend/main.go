@@ -33,6 +33,7 @@ var (
 	dataDirFlag      = flag.String("data-dir", "./data", "Data directory path (default: ./data)")
 	webDirFlag       = flag.String("web-dir", "./", "Frontend web root directory (default: ./)")
 	portFlag         = flag.String("port", "", "Server port (default: 8902)")
+	deviceTypeFlag   = flag.String("device-type", "", "Device type for usage stats (e.g., fnos, docker)")
 	showVersion      = flag.Bool("version", false, "Show version information")
 	resetAdminPasswd = flag.String("reset-admin-password", "", "Reset admin password (requires db-path or data-dir)")
 )
@@ -63,6 +64,7 @@ func printHelp() {
 	fmt.Println("  -data-dir string            Data directory path (default: ./data)")
 	fmt.Println("  -web-dir string             Frontend web root directory (default: ./)")
 	fmt.Println("  -port string                Server port (default: 8902)")
+	fmt.Println("  -device-type string         Device type for usage stats (e.g., fnos, docker)")
 	fmt.Println("  -reset-admin-password string  Reset admin password")
 	fmt.Println("  -version                    Show version information")
 	fmt.Println()
@@ -153,7 +155,8 @@ func main() {
 	// 启动使用统计服务
 	usageStatsSvc := services.NewUsageStatsService(Version)
 	usageStatsSvc.SetAppName("lottery")
-	usageStatsSvc.SetAPIURL("http://page.wycto.cc/api/apps.online/refresh")
+	usageStatsSvc.SetDeviceType(*deviceTypeFlag)
+	usageStatsSvc.SetAPIURL("http://techfunway.wycto.cn/api/apps.online/refresh")
 
 	// 初始化设备标识码
 	if err := usageStatsSvc.InitDeviceID(config.dataDir); err != nil {
@@ -282,6 +285,23 @@ func main() {
 			authorized.GET("/statistics/numbers", handlers.GetNumberFrequency)
 			authorized.GET("/statistics/trends", handlers.GetTrends)
 			authorized.GET("/statistics/recent-winnings", handlers.GetRecentWinnings)
+
+			// 竞彩足球
+			football := authorized.Group("/football")
+			{
+				football.POST("/matches", handlers.CreateFootballMatch)
+				football.GET("/matches", handlers.GetFootballMatches)
+				football.PUT("/matches/:id", handlers.UpdateFootballMatch)
+				football.DELETE("/matches/:id", handlers.DeleteFootballMatch)
+				football.GET("/matches/fetch", handlers.FetchFootballMatches)
+				football.POST("/matches/fetch-results", handlers.FetchFootballResults)
+				football.POST("/bets", handlers.CreateFootballBet)
+				football.GET("/bets", handlers.GetFootballBets)
+				football.PUT("/bets/:id", handlers.UpdateFootballBet)
+				football.DELETE("/bets/:id", handlers.DeleteFootballBet)
+				football.POST("/bets/recheck", handlers.RecheckFootballBets)
+				football.GET("/overview", handlers.GetFootballOverview)
+			}
 		}
 	}
 

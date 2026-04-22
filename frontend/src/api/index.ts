@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs } from '../types'
+import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview } from '../types'
 
 // API 基础路径配置
 // 开发环境: http://localhost:8902/api
@@ -194,6 +194,51 @@ export const systemApi = {
   // 获取升级历史
   getUpgradeHistory: (): Promise<{ data: UpgradeHistory[] }> =>
     api.get('/version/history'),
+}
+
+// ===== 竞彩足球 API =====
+export interface CreateFootballMatchPayload {
+  match_id: string
+  issue_number?: string
+  league?: string
+  home_team: string
+  away_team: string
+  match_time: string
+  home_score?: number
+  away_score?: number
+  half_home_score?: number
+  half_away_score?: number
+  handicap?: number
+  status?: string
+}
+
+export interface CreateFootballBetPayload {
+  bet_type: string
+  amount: number
+  multiple?: number
+  selections: string
+  remark?: string
+}
+
+export const footballMatchApi = {
+  create: (data: CreateFootballMatchPayload) => api.post('/football/matches', data),
+  list: (params?: { league?: string; status?: string; page?: number; size?: number }) =>
+    api.get('/football/matches', { params }),
+  update: (id: number, data: CreateFootballMatchPayload) => api.put(`/football/matches/${id}`, data),
+  delete: (id: number) => api.delete(`/football/matches/${id}`),
+  fetch: () => api.get('/football/matches/fetch'),
+  fetchResults: () => api.post('/football/matches/fetch-results'),
+}
+
+export const footballBetApi = {
+  create: (data: CreateFootballBetPayload) => api.post('/football/bets', data),
+  list: (params?: { status?: string; page?: number; size?: number }) =>
+    api.get('/football/bets', { params }),
+  update: (id: number, data: CreateFootballBetPayload) => api.put(`/football/bets/${id}`, data),
+  delete: (id: number) => api.delete(`/football/bets/${id}`),
+  recheck: () => api.post('/football/bets/recheck'),
+  overview: (): Promise<{ data: FootballOverview }> =>
+    api.get('/football/overview'),
 }
 
 export default api

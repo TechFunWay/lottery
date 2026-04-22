@@ -20,37 +20,50 @@ import (
 
 // UsageStatsService 使用统计服务
 type UsageStatsService struct {
-	apiURL      string
-	version     string
-	deviceID    string
-	appName     string
-	os          string
-	arch        string
-	hostname    string
-	enabled     bool
-	stopChan    chan struct{}
-	once        sync.Once
-	mu          sync.RWMutex
+	apiURL     string
+	version    string
+	deviceID   string
+	appName    string
+	os         string
+	arch       string
+	hostname   string
+	deviceType string // 设备类型（fnos/docker等）
+	enabled    bool
+	stopChan   chan struct{}
+	once       sync.Once
+	mu         sync.RWMutex
 }
 
-// StatsRequest 统计请求结构
 type StatsRequest struct {
-	AppName   string `json:"app_name,omitempty"`  // 应用名称
-	Version   string `json:"version"`
-	DeviceID  string `json:"device_id,omitempty"`  // 设备唯一标识码
-	OS        string `json:"os,omitempty"`         // 操作系统
-	Arch      string `json:"arch,omitempty"`       // 架构
-	Hostname  string `json:"hostname,omitempty"`   // 主机名
+	AppName    string `json:"app_name,omitempty"`    // 应用名称
+	Version    string `json:"version"`               // 应用版本
+	DeviceID   string `json:"device_id,omitempty"`   // 设备唯一标识码
+	DeviceType string `json:"device_type,omitempty"` // 设备类型（fnos/docker等）
+	OS         string `json:"os,omitempty"`          // 操作系统
+	Arch       string `json:"arch,omitempty"`        // 架构
+	Hostname   string `json:"hostname,omitempty"`    // 主机名
+}
+
+func (s *UsageStatsService) SetDeviceType(deviceType string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deviceType = deviceType
+}
+
+func (s *UsageStatsService) GetDeviceType() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.deviceType
 }
 
 // NewUsageStatsService 创建使用统计服务
 func NewUsageStatsService(version string) *UsageStatsService {
 	// 获取系统信息
 	hostname, _ := os.Hostname()
-	
+
 	// 检查是否禁用统计
 	enabled := os.Getenv("DISABLE_STATS") != "true"
-	
+
 	return &UsageStatsService{
 		apiURL:   "", // API地址，需要用户填写
 		version:  version,
@@ -80,7 +93,7 @@ func (s *UsageStatsService) InitDeviceID(dataDir string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.deviceID = deviceID
@@ -298,12 +311,13 @@ func (s *UsageStatsService) sendStats() {
 	}
 
 	req := StatsRequest{
-		AppName:  appName,
-		Version:  version,
-		DeviceID: deviceID,
-		OS:       osType,
-		Arch:     arch,
-		Hostname: hostname,
+		AppName:    appName,   // 应用名称
+		Version:    version,   // 应用版本
+		DeviceID:   deviceID,  // 设备唯一标识
+		DeviceType: s.GetDeviceType(), // 设备类型（fnos/docker等）
+		OS:         osType,    // 操作系统类型（darwin/linux/windows）
+		Arch:       arch,      // CPU架构（amd64/arm64）
+		Hostname:   hostname,  // 主机名
 	}
 
 	jsonData, err := json.Marshal(req)
