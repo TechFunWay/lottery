@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound, Zap, ExternalLink } from 'lucide-vue-next'
+import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound, Zap, ExternalLink, Heart } from 'lucide-vue-next'
 import type { User, VersionInfo } from '../types'
 import { authApi, systemApi } from '../api'
+import SupportModal from './SupportModal.vue'
 import { hashPassword } from '../utils/crypto'
 
 const route = useRoute()
@@ -12,6 +13,7 @@ const menuOpen = ref(false)
 const currentUser = ref<User | null>(null)
 const showUserMenu = ref(false)
 const showPasswordModal = ref(false)
+const showSupportModal = ref(false)
 const versionInfo = ref<VersionInfo | null>(null)
 const oldPassword = ref('')
 const newPassword = ref('')
@@ -185,15 +187,13 @@ onUnmounted(() => {
             {{ item.name }}
           </router-link>
 
-          <a
-            href="http://techfunway.wycto.cn/"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all duration-200"
+          <button
+            @click="showSupportModal = true"
+            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all duration-200 cursor-pointer"
           >
-            <ExternalLink class="w-4 h-4" />
+            <Heart class="w-4 h-4 text-rose-500" />
             支持
-          </a>
+          </button>
 
           <!-- User menu / Login button -->
           <div v-if="isLoggedIn" class="relative ml-2 user-menu-wrapper">
@@ -292,16 +292,13 @@ onUnmounted(() => {
             {{ item.name }}
           </router-link>
 
-          <a
-            href="http://techfunway.wycto.cn/"
-            target="_blank"
-            rel="noopener noreferrer"
-            @click="closeMenu"
-            class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200"
+          <button
+            @click="showSupportModal = true; closeMenu()"
+            class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200 w-full text-left cursor-pointer"
           >
-            <ExternalLink class="w-5 h-5" />
+            <Heart class="w-5 h-5 text-rose-500" />
             支持
-          </a>
+          </button>
 
           <!-- Login/Logout -->
           <div v-if="isLoggedIn" class="border-t border-slate-100 pt-3">
@@ -359,6 +356,9 @@ onUnmounted(() => {
     class="fixed inset-0 z-40 bg-black/20 md:hidden"
     @click="closeMenu"
   />
+
+  <!-- 支持弹窗 -->
+  <SupportModal v-model="showSupportModal" />
 
   <!-- 修改密码弹窗 -->
   <teleport to="body">

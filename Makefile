@@ -47,8 +47,21 @@ help:
 	@echo -e "$(GREEN)当前版本:$(NC) $(VERSION)"
 	@echo ""
 
-# 开发环境：完整流程
-dev: dev-frontend dev-backend copy-frontend dev-run
+# 开发环境：完整流程（先清理旧构建，再重新编译，最后启动）
+dev: clean-dev dev-frontend dev-backend copy-frontend dev-run
+
+# 开发环境：清理旧的构建产物（仅 develop 目录和前端 dist）
+clean-dev:
+	@echo -e "$(BLUE)========================================$(NC)"
+	@echo -e "$(BLUE)  开发环境 - 清理旧构建产物$(NC)"
+	@echo -e "$(BLUE)========================================$(NC)"
+	@echo -e "$(YELLOW)🧹 清理前端 dist 目录...$(NC)"
+	@rm -rf "$(FRONTEND_DIR)/dist"
+	@echo -e "$(YELLOW)🧹 清理 develop 目录...$(NC)"
+	@rm -rf "$(DEVELOP_DIR)"
+	@mkdir -p "$(DEVELOP_DIR)"
+	@echo -e "$(GREEN)✅ 清理完成$(NC)"
+	@echo ""
 
 # 开发环境：仅构建前端
 dev-frontend:
@@ -76,6 +89,10 @@ copy-frontend:
 			rm -rf "./lottery-web"; \
 			cp -r "$(FRONTEND_DIR)/dist/lottery-web" "$(DEVELOP_DIR)/"; \
 		fi; \
+		if [ -d "$(FRONTEND_DIR)/dist/img" ]; then \
+			rm -rf "$(DEVELOP_DIR)/img"; \
+			cp -r "$(FRONTEND_DIR)/dist/img" "$(DEVELOP_DIR)/"; \
+		fi; \
 		echo -e "$(GREEN)✅ 前端文件复制完成$(NC)"; \
 	else \
 		echo -e "$(RED)❌ 错误: 前端构建产物不存在$(NC)"; \
@@ -98,26 +115,21 @@ dev-run:
 	@echo -e "$(BLUE)========================================$(NC)"
 	@echo -e "$(BLUE)  开发环境 - 启动服务$(NC)"
 	@echo -e "$(BLUE)========================================$(NC)"
-	@if [ ! -f "./$(BINARY_NAME)" ]; then \
-		echo -e "$(YELLOW)⚠️  $(BINARY_NAME) 不存在，正在构建...$(NC)"; \
-		$(MAKE) dev-backend; \
-	fi
-	@if [ ! -f "$(DEVELOP_DIR)/index.html" ] || [ ! -d "$(DEVELOP_DIR)/lottery-web" ]; then \
-		echo -e "$(YELLOW)⚠️  前端文件不存在，正在复制...$(NC)"; \
-		$(MAKE) copy-frontend; \
-	fi
-	@echo -e "$(GREEN)🚀 启动 Lottery Assistant...$(NC)"
-	@echo -e "$(YELLOW)访问地址: http://localhost:8902$(NC)"
-	@echo -e "$(YELLOW)API地址: http://localhost:8902/api$(NC)"
-	@echo ""
+	@echo -e "$(YELLOW)🔍 检查端口 $${PORT:-8902} 占用情况...$(NC)"
 	@EXISTING_PID=$$(lsof -ti:$${PORT:-8902} 2>/dev/null); \
 	if [ -n "$$EXISTING_PID" ]; then \
 		echo -e "$(YELLOW)⚠️  端口 $${PORT:-8902} 已被占用 (PID: $$EXISTING_PID)，正在停止旧进程...$(NC)"; \
 		kill $$EXISTING_PID 2>/dev/null; \
 		sleep 1; \
 		echo -e "$(GREEN)✅ 旧进程已停止$(NC)"; \
+	else \
+		echo -e "$(GREEN)✅ 端口 $${PORT:-8902} 未被占用$(NC)"; \
 	fi
-	@echo -e "$(GREEN)🚀 启动新服务...$(NC)"
+	@echo ""
+	@echo -e "$(GREEN)🚀 启动 Lottery Assistant...$(NC)"
+	@echo -e "$(YELLOW)访问地址: http://localhost:8902$(NC)"
+	@echo -e "$(YELLOW)API地址: http://localhost:8902/api$(NC)"
+	@echo ""
 	@PORT=$${PORT:-8902} DATA_DIR=$${DATA_DIR:-$(DEVELOP_DIR)/data} ./$(BINARY_NAME) -web-dir $(DEVELOP_DIR) >> $(DEVELOP_DIR)/lottery.log 2>&1 &
 	@sleep 2
 	@if lsof -ti:$${PORT:-8902} > /dev/null 2>&1; then \

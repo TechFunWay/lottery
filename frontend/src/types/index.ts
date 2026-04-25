@@ -51,6 +51,9 @@ export interface PurchaseRecord {
   numbers: string
   bet_type: BetType
   amount: number
+  multiple: number
+  append: boolean
+  periods: number
   remark: string
   status: '待开奖' | '已开奖' | '未中奖' | '已中奖'
   created_at: string

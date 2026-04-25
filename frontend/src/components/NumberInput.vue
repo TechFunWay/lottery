@@ -10,11 +10,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'betCountChange': [count: number]
 }>()
 
 const config = computed(() => LOTTERY_CONFIGS.find(c => c.type === props.lotteryType))
 
-// 主号码数组
+// 主号码数组（支持动态数量）
 const mainNumbers = ref<(number | null)[]>([])
 const blueNumbers = ref<(number | null)[]>([])
 
@@ -42,35 +43,84 @@ let internalUpdate = false
 
 // 监听外部值变化（编辑回填时触发）
 watch(() => props.modelValue, (val) => {
-  if (internalUpdate) return  // 内部更新触发的，跳过，防止循环覆盖
+  if (internalUpdate) return
   if (!val || !config.value) return
-  // 如果 val 是空字符串，不做处理（避免初始化时清空）
   if (val === '' || val === '[]') return
   try {
     const parsed = JSON.parse(val)
-    const blueCount = config.value.blueRange?.count ?? 0
-
-    const padTo = (arr: number[], count: number) =>
-      [...arr, ...Array(Math.max(0, count - arr.length)).fill(null)]
 
     if (parsed.red !== undefined) {
-      mainNumbers.value = padTo(parsed.red ?? [], config.value.redRange.count)
-      blueNumbers.value = padTo(parsed.blue ?? [], blueCount)
+      mainNumbers.value = parsed.red.map((n: number) => n)
+      blueNumbers.value = parsed.blue ? parsed.blue.map((n: number) => n) : []
     } else if (parsed.front !== undefined) {
-      mainNumbers.value = padTo(parsed.front ?? [], config.value.redRange.count)
-      blueNumbers.value = padTo(parsed.back ?? [], blueCount)
+      mainNumbers.value = parsed.front.map((n: number) => n)
+      blueNumbers.value = parsed.back ? parsed.back.map((n: number) => n) : []
     } else if (parsed.main !== undefined) {
-      mainNumbers.value = padTo(parsed.main ?? [], config.value.redRange.count)
-      blueNumbers.value = padTo(parsed.special ?? [], blueCount)
+      mainNumbers.value = parsed.main.map((n: number) => n)
+      blueNumbers.value = parsed.special ? parsed.special.map((n: number) => n) : []
     } else if (parsed.numbers !== undefined) {
-      mainNumbers.value = padTo(parsed.numbers ?? [], config.value.redRange.count)
+      mainNumbers.value = parsed.numbers.map((n: number) => n)
+      blueNumbers.value = []
     } else if (Array.isArray(parsed)) {
-      mainNumbers.value = padTo(parsed, config.value.redRange.count)
+      mainNumbers.value = parsed.map((n: number) => n)
+      blueNumbers.value = []
     }
   } catch (e) {
     // ignore
   }
 }, { immediate: true })
+
+// 计算组合数 C(n, k)
+const comb = (n: number, k: number): number => {
+  if (n < k || k < 0) return 0
+  if (k === 0 || k === n) return 1
+  let res = 1
+  for (let i = 0; i < k; i++) {
+    res = res * (n - i) / (i + 1)
+  }
+  return Math.round(res)
+}
+
+// 计算当前注数
+const betCount = computed(() => {
+  if (!config.value) return 0
+
+  const mainFilled = mainNumbers.value.filter(n => n !== null).length
+  const blueFilled = blueNumbers.value.filter(n => n !== null).length
+
+  const mainNeed = config.value.redRange.count
+  const blueNeed = config.value.blueRange?.count ?? 0
+
+  // 只有双色球和大乐透支持复式
+  const supportsMultiple = props.lotteryType === '双色球' || props.lotteryType === '大乐透'
+  if (!supportsMultiple) {
+    return (mainFilled === mainNeed && (blueNeed === 0 || blueFilled === blueNeed)) ? 1 : 0
+  }
+
+  if (mainFilled < mainNeed) return 0
+  if (blueNeed > 0 && blueFilled < blueNeed) return 0
+
+  const mainCombs = comb(mainFilled, mainNeed)
+  const blueCombs = blueNeed > 0 ? comb(blueFilled, blueNeed) : 1
+
+  return mainCombs * blueCombs
+})
+
+// 是否复式投注
+const isMultiple = computed(() => {
+  if (!config.value) return false
+  const supportsMultiple = props.lotteryType === '双色球' || props.lotteryType === '大乐透'
+  if (!supportsMultiple) return false
+
+  const mainFilled = mainNumbers.value.filter(n => n !== null).length
+  const blueFilled = blueNumbers.value.filter(n => n !== null).length
+
+  return mainFilled > config.value.redRange.count || blueFilled > (config.value.blueRange?.count ?? 0)
+})
+
+watch(betCount, (count) => {
+  emit('betCountChange', count)
+})
 
 const updateValue = () => {
   if (!config.value) return
@@ -91,10 +141,8 @@ const updateValue = () => {
     result = mains
   }
 
-  // 标记为内部更新，避免 watch modelValue 触发后覆盖蓝球槽位
   internalUpdate = true
   emit('update:modelValue', JSON.stringify(result))
-  // 下一个 tick 后重置标记，保证外部真实赋值（如编辑回填）仍能触发 watch
   setTimeout(() => { internalUpdate = false }, 0)
 }
 
@@ -102,7 +150,6 @@ const handleInput = (index: number, type: 'main' | 'blue', event: Event) => {
   const input = event.target as HTMLInputElement
   const rawVal = input.value.trim()
 
-  // 清空当前错误
   errors.value = []
 
   if (rawVal === '') {
@@ -121,7 +168,26 @@ const handleInput = (index: number, type: 'main' | 'blue', event: Event) => {
     return
   }
 
-  // 只更新临时值，不做校验（等失去焦点时校验）
+  // 范围校验
+  const min = type === 'main' ? (config.value?.redRange.min ?? 0) : (config.value?.blueRange?.min ?? 0)
+  const max = type === 'main' ? (config.value?.redRange.max ?? 99) : (config.value?.blueRange?.max ?? 99)
+
+  if (val < min || val > max) {
+    errors.value = [`${val} 超出范围 ${min}-${max}`]
+    return
+  }
+
+  // 检查重复号码（福彩3D、排列3、排列5、七星彩允许重复）
+  const allowDuplicate = props.lotteryType === '福彩3D' || props.lotteryType === '排列3' || props.lotteryType === '排列5' || props.lotteryType === '七星彩'
+  if (!allowDuplicate) {
+    const currentArray = type === 'main' ? mainNumbers.value : blueNumbers.value
+    const existingIndex = currentArray.findIndex((n, i) => i !== index && n === val)
+    if (existingIndex !== -1) {
+      errors.value = [`号码 ${val} 已存在`]
+      return
+    }
+  }
+
   if (type === 'main') {
     mainNumbers.value[index] = val
   } else {
@@ -157,11 +223,9 @@ const handleBlur = (index: number, type: 'main' | 'blue', event: Event) => {
     return
   }
 
-  // 获取当前号码范围
   const min = type === 'main' ? (config.value?.redRange.min ?? 0) : (config.value?.blueRange?.min ?? 0)
   const max = type === 'main' ? (config.value?.redRange.max ?? 99) : (config.value?.blueRange?.max ?? 99)
 
-  // 范围检查
   if (val < min || val > max) {
     errors.value = [`${val} 超出范围 ${min}-${max}`]
     input.value = ''
@@ -174,31 +238,98 @@ const handleBlur = (index: number, type: 'main' | 'blue', event: Event) => {
     return
   }
 
-  // 重复检查
-  const currentArray = type === 'main' ? mainNumbers.value : blueNumbers.value
-  const existingIndex = currentArray.findIndex((n, i) => i !== index && n === val)
-  if (existingIndex !== -1) {
-    errors.value = [`号码 ${val} 已存在`]
-    input.value = ''
-    if (type === 'main') {
-      mainNumbers.value[index] = null
-    } else {
-      blueNumbers.value[index] = null
+  // 检查重复号码（福彩3D、排列3、排列5、七星彩允许重复）
+  const allowDuplicate = props.lotteryType === '福彩3D' || props.lotteryType === '排列3' || props.lotteryType === '排列5' || props.lotteryType === '七星彩'
+  if (!allowDuplicate) {
+    const currentArray = type === 'main' ? mainNumbers.value : blueNumbers.value
+    const existingIndex = currentArray.findIndex((n, i) => i !== index && n === val)
+    if (existingIndex !== -1) {
+      errors.value = [`号码 ${val} 已存在`]
+      input.value = ''
+      if (type === 'main') {
+        mainNumbers.value[index] = null
+      } else {
+        blueNumbers.value[index] = null
+      }
+      updateValue()
+      return
     }
-    updateValue()
-    return
   }
 
-  // 有效值，自动排序
-  if (type === 'main') {
-    const filled = mainNumbers.value.filter(n => n !== null).sort((a, b) => a! - b!)
-    mainNumbers.value = [...filled, ...Array(config.value!.redRange.count - filled.length).fill(null)]
-  } else if (blueNumbers.value.length > 0) {
-    const filled = blueNumbers.value.filter(n => n !== null).sort((a, b) => a! - b!)
-    blueNumbers.value = [...filled, ...Array(config.value!.blueRange!.count - filled.length).fill(null)]
+  // 有效值，自动排序（福彩3D、排列3、排列5、七星彩不排序）
+  const noSort = props.lotteryType === '福彩3D' || props.lotteryType === '排列3' || props.lotteryType === '排列5' || props.lotteryType === '七星彩'
+  if (!noSort) {
+    if (type === 'main') {
+      const filled = mainNumbers.value.filter(n => n !== null).sort((a, b) => a! - b!)
+      // 保持数组长度不变，用 null 填充
+      const newArr = Array(mainNumbers.value.length).fill(null)
+      filled.forEach((n, i) => { if (n !== null) newArr[i] = n })
+      mainNumbers.value = newArr
+    } else if (blueNumbers.value.length > 0) {
+      const filled = blueNumbers.value.filter(n => n !== null).sort((a, b) => a! - b!)
+      const newArr = Array(blueNumbers.value.length).fill(null)
+      filled.forEach((n, i) => { if (n !== null) newArr[i] = n })
+      blueNumbers.value = newArr
+    }
   }
 
   errors.value = []
+  updateValue()
+}
+
+// 添加号码输入框
+const addMainSlot = () => {
+  if (!config.value) return
+  const supportsMultiple = props.lotteryType === '双色球' || props.lotteryType === '大乐透'
+  if (!supportsMultiple) return
+  const maxCount = props.lotteryType === '双色球' ? 20 : 18
+  if (mainNumbers.value.length >= maxCount) {
+    errors.value = [`最多选择 ${maxCount} 个号码`]
+    return
+  }
+  mainNumbers.value.push(null)
+}
+
+const addBlueSlot = () => {
+  if (!config.value) return
+  const supportsMultiple = props.lotteryType === '双色球' || props.lotteryType === '大乐透'
+  if (!supportsMultiple) return
+  const maxCount = props.lotteryType === '双色球' ? 16 : 12
+  if (blueNumbers.value.length >= maxCount) {
+    errors.value = [`最多选择 ${maxCount} 个号码`]
+    return
+  }
+  blueNumbers.value.push(null)
+}
+
+// 删除最后一个空输入框
+const removeMainSlot = () => {
+  if (mainNumbers.value.length <= (config.value?.redRange.count ?? 1)) return
+  // 从后往前找第一个为 null 的
+  const lastNullIndex = mainNumbers.value.reduceRight((acc, n, i) => {
+    if (acc === -1 && n === null) return i
+    return acc
+  }, -1)
+  if (lastNullIndex !== -1) {
+    mainNumbers.value.splice(lastNullIndex as number, 1)
+  } else {
+    // 如果没有空的，删除最后一个
+    mainNumbers.value.pop()
+  }
+  updateValue()
+}
+
+const removeBlueSlot = () => {
+  if (blueNumbers.value.length <= (config.value?.blueRange?.count ?? 1)) return
+  const lastNullIndex = blueNumbers.value.reduceRight((acc, n, i) => {
+    if (acc === -1 && n === null) return i
+    return acc
+  }, -1)
+  if (lastNullIndex !== -1) {
+    blueNumbers.value.splice(lastNullIndex as number, 1)
+  } else {
+    blueNumbers.value.pop()
+  }
   updateValue()
 }
 
@@ -220,6 +351,9 @@ const mainMax = computed(() => config.value?.redRange.max ?? 99)
 const mainMin = computed(() => config.value?.redRange.min ?? 0)
 const blueMax = computed(() => config.value?.blueRange?.max ?? 99)
 const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
+
+// 是否支持复式
+const supportsMultiple = computed(() => props.lotteryType === '双色球' || props.lotteryType === '大乐透')
 </script>
 
 <template>
@@ -232,12 +366,30 @@ const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
 
     <!-- 主号码 -->
     <div>
-      <label class="block text-sm font-medium text-slate-600 mb-2">
-        {{ mainLabel }}
-        <span class="text-slate-400 ml-1">
-          ({{ mainMin }}-{{ mainMax }}，共{{ config?.redRange.count }}个)
-        </span>
-      </label>
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-sm font-medium text-slate-600">
+          {{ mainLabel }}
+          <span class="text-slate-400 ml-1">
+            ({{ mainMin }}-{{ mainMax }}，至少{{ config?.redRange.count }}个)
+          </span>
+        </label>
+        <div v-if="supportsMultiple" class="flex items-center gap-1">
+          <button
+            @click="removeMainSlot"
+            :disabled="mainNumbers.length <= (config?.redRange.count ?? 1)"
+            class="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200 text-xs disabled:opacity-30 cursor-pointer"
+          >
+            −
+          </button>
+          <span class="text-xs text-slate-400 w-8 text-center">{{ mainNumbers.length }}</span>
+          <button
+            @click="addMainSlot"
+            class="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200 text-xs cursor-pointer"
+          >
+            +
+          </button>
+        </div>
+      </div>
       <div class="flex flex-wrap gap-2">
         <div
           v-for="(num, i) in mainNumbers"
@@ -262,12 +414,30 @@ const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
 
     <!-- 蓝球/后区 -->
     <div v-if="config?.blueRange">
-      <label class="block text-sm font-medium text-slate-600 mb-2">
-        {{ blueLabel }}
-        <span class="text-slate-400 ml-1">
-          ({{ blueMin }}-{{ blueMax }}，共{{ config?.blueRange.count }}个)
-        </span>
-      </label>
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-sm font-medium text-slate-600">
+          {{ blueLabel }}
+          <span class="text-slate-400 ml-1">
+            ({{ blueMin }}-{{ blueMax }}，至少{{ config?.blueRange.count }}个)
+          </span>
+        </label>
+        <div v-if="supportsMultiple" class="flex items-center gap-1">
+          <button
+            @click="removeBlueSlot"
+            :disabled="blueNumbers.length <= (config?.blueRange?.count ?? 1)"
+            class="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200 text-xs disabled:opacity-30 cursor-pointer"
+          >
+            −
+          </button>
+          <span class="text-xs text-slate-400 w-8 text-center">{{ blueNumbers.length }}</span>
+          <button
+            @click="addBlueSlot"
+            class="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200 text-xs cursor-pointer"
+          >
+            +
+          </button>
+        </div>
+      </div>
       <div class="flex flex-wrap gap-2">
         <div
           v-for="(num, i) in blueNumbers"
@@ -287,6 +457,20 @@ const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
           />
         </div>
       </div>
+    </div>
+
+    <!-- 注数信息 -->
+    <div v-if="supportsMultiple" class="flex items-center gap-3 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl">
+      <span class="text-amber-600 text-sm font-medium">
+        {{ isMultiple ? '复式投注' : '单式投注' }}
+      </span>
+      <span class="text-amber-500 text-xs">|</span>
+      <span class="text-amber-700 text-sm">
+        共 <strong>{{ betCount }}</strong> 注
+      </span>
+      <span v-if="isMultiple" class="text-amber-500 text-xs">
+        (金额 ¥{{ betCount * 2 }})
+      </span>
     </div>
 
     <!-- 号码预览 -->

@@ -14,6 +14,7 @@ import (
 )
 
 var drawService = &services.DrawService{}
+var schedulerService = services.NewSchedulerService()
 
 type CreateDrawRequest struct {
 	LotteryType string `json:"lottery_type" binding:"required"`
@@ -266,4 +267,10 @@ func RecheckWinnings(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "正在重新计算中奖记录"})
+}
+
+// FetchAutoDraws POST /api/draws/fetch-auto - 手动触发自动抓取
+func FetchAutoDraws(c *gin.Context) {
+	schedulerService.TriggerNow()
+	c.JSON(http.StatusOK, gin.H{"message": "已触发自动抓取任务，请稍后查看结果"})
 }

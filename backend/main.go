@@ -176,6 +176,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 启动定时抓取任务
+	schedulerSvc := services.NewSchedulerService()
+	schedulerSvc.Start()
+	defer schedulerSvc.Stop()
+
 	// 根据环境设置 Gin 模式（默认生产模式，关闭调试日志）
 	env := os.Getenv("ENV")
 	if env == "development" {
@@ -274,6 +279,7 @@ func main() {
 			authorized.DELETE("/draws/:id", handlers.DeleteDraw)
 			authorized.GET("/draws/fetch", handlers.FetchDraw)
 			authorized.POST("/draws/fetch-batch", handlers.FetchBatchDraws)
+			authorized.POST("/draws/fetch-auto", handlers.FetchAutoDraws)
 
 			// 中奖记录
 			authorized.GET("/winnings", handlers.GetWinnings)
@@ -338,6 +344,13 @@ func main() {
 		sugarLogger.Infof("✅ Static resources served from %s", webStaticDir)
 	} else {
 		sugarLogger.Warnf("⚠️  Static resources directory not found: %s", webStaticDir)
+	}
+
+	// 图片资源路由（img 目录）
+	webImgDir := filepath.Join(webRoot, "img")
+	if _, err := os.Stat(webImgDir); err == nil {
+		r.Static("/img", webImgDir)
+		sugarLogger.Infof("✅ Images served from %s", webImgDir)
 	}
 
 	// NoRoute 处理 SPA 路由，所有非 API 请求都返回 index.html

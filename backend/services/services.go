@@ -650,17 +650,17 @@ func (s *WinningService) CalculateWinning(purchase *models.PurchaseRecord, draw 
 
 	switch purchase.LotteryType {
 	case models.ShuangSeQiu:
-		level, name, amount = rules.CalculateShuangSeQiu(purchase.Numbers, draw.Numbers)
+		level, name, amount = rules.CalculateShuangSeQiu(purchase.Numbers, draw.Numbers, purchase.Multiple)
 	case models.DaLeTou:
-		level, name, amount = rules.CalculateDaLeTou(purchase.Numbers, draw.Numbers)
+		level, name, amount = rules.CalculateDaLeTou(purchase.Numbers, draw.Numbers, purchase.Multiple, purchase.Append)
 	case models.FuCai3D:
-		level, name, amount = rules.CalculateFuCai3D(purchase.Numbers, draw.Numbers)
+		level, name, amount = rules.CalculateFuCai3D(purchase.Numbers, draw.Numbers, purchase.Multiple)
 	case models.PaiLie3:
-		level, name, amount = rules.CalculatePaiLie3(purchase.Numbers, draw.Numbers)
+		level, name, amount = rules.CalculatePaiLie3(purchase.Numbers, draw.Numbers, purchase.Multiple)
 	case models.PaiLie5:
-		level, name, amount = rules.CalculatePaiLie5(purchase.Numbers, draw.Numbers)
+		level, name, amount = rules.CalculatePaiLie5(purchase.Numbers, draw.Numbers, purchase.Multiple)
 	case models.QiLeCai:
-		level, name, amount = rules.CalculateQiLeCai(purchase.Numbers, draw.Numbers)
+		level, name, amount = rules.CalculateQiLeCai(purchase.Numbers, draw.Numbers, purchase.Multiple)
 	}
 
 	return &models.WinningRecord{
