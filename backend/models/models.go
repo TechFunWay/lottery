@@ -41,6 +41,9 @@ type PurchaseRecord struct {
 	Numbers      string      `json:"numbers" gorm:"not null"` // JSON 格式存储号码
 	BetType      BetType     `json:"bet_type" gorm:"default:'单式'"`
 	Amount       float64     `json:"amount" gorm:"not null"` // 购买金额（元）
+	Multiple     int         `json:"multiple" gorm:"default:1"` // 倍数
+	Append       bool        `json:"append" gorm:"default:false"` // 是否追加，仅大乐透有效
+	Periods      int         `json:"periods" gorm:"default:1"` // 期数
 	Remark       string      `json:"remark"`
 	Status       string      `json:"status" gorm:"default:'待开奖'"` // 待开奖/已开奖/未中奖/已中奖
 }

@@ -31,8 +31,30 @@ var shuangSeQiuPrizes = map[string]ShuangSeQiuResult{
 	"0+1": {6, "六等奖", 5},
 }
 
-// CalculateShuangSeQiu 计算双色球中奖
-func CalculateShuangSeQiu(purchaseJSON, drawJSON string) (level int, name string, amount float64) {
+// combinations 生成从 n 个元素中选 k 个的所有组合
+func combinations(arr []int, k int) [][]int {
+	var result [][]int
+	var current []int
+	var backtrack func(start int)
+	backtrack = func(start int) {
+		if len(current) == k {
+			tmp := make([]int, k)
+			copy(tmp, current)
+			result = append(result, tmp)
+			return
+		}
+		for i := start; i < len(arr); i++ {
+			current = append(current, arr[i])
+			backtrack(i + 1)
+			current = current[:len(current)-1]
+		}
+	}
+	backtrack(0)
+	return result
+}
+
+// CalculateShuangSeQiu 计算双色球中奖（支持复式）
+func CalculateShuangSeQiu(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
 	var purchase, draw ShuangSeQiuNumbers
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
 		return 0, "未中奖", 0
@@ -41,15 +63,61 @@ func CalculateShuangSeQiu(purchaseJSON, drawJSON string) (level int, name string
 		return 0, "未中奖", 0
 	}
 
-	redMatch := countMatch(purchase.Red, draw.Red)
-	blueMatch := 0
-	if len(purchase.Blue) > 0 && len(draw.Blue) > 0 && purchase.Blue[0] == draw.Blue[0] {
-		blueMatch = 1
+	// 单式投注：红球6个，蓝球1个
+	isMultiple := len(purchase.Red) > 6 || len(purchase.Blue) > 1
+
+	if !isMultiple {
+		// 单式直接计算
+		redMatch := countMatch(purchase.Red, draw.Red)
+		blueMatch := 0
+		if len(purchase.Blue) > 0 && len(draw.Blue) > 0 && purchase.Blue[0] == draw.Blue[0] {
+			blueMatch = 1
+		}
+		key := formatKey(redMatch, blueMatch)
+		if result, ok := shuangSeQiuPrizes[key]; ok {
+			return result.Level, result.Name, result.Amount * float64(multiple)
+		}
+		return 0, "未中奖", 0
 	}
 
-	key := formatKey(redMatch, blueMatch)
-	if result, ok := shuangSeQiuPrizes[key]; ok {
-		return result.Level, result.Name, result.Amount
+	// 复式投注：计算所有组合，取最高奖级和总奖金
+	redCombs := [][]int{purchase.Red}
+	blueCombs := [][]int{purchase.Blue}
+
+	if len(purchase.Red) > 6 {
+		redCombs = combinations(purchase.Red, 6)
+	}
+	if len(purchase.Blue) > 1 {
+		blueCombs = make([][]int, len(purchase.Blue))
+		for i, b := range purchase.Blue {
+			blueCombs[i] = []int{b}
+		}
+	}
+
+	bestLevel := 0
+	bestName := "未中奖"
+	totalAmount := 0.0
+
+	for _, reds := range redCombs {
+		for _, blues := range blueCombs {
+			redMatch := countMatch(reds, draw.Red)
+			blueMatch := 0
+			if len(blues) > 0 && len(draw.Blue) > 0 && blues[0] == draw.Blue[0] {
+				blueMatch = 1
+			}
+			key := formatKey(redMatch, blueMatch)
+			if result, ok := shuangSeQiuPrizes[key]; ok {
+				totalAmount += result.Amount * float64(multiple)
+				if bestLevel == 0 || result.Level < bestLevel {
+					bestLevel = result.Level
+					bestName = result.Name
+				}
+			}
+		}
+	}
+
+	if bestLevel > 0 {
+		return bestLevel, bestName, totalAmount
 	}
 	return 0, "未中奖", 0
 }
@@ -99,7 +167,8 @@ var daLeTouPrizes = []struct {
 	{0, 2, 7, "七等奖", 15},
 }
 
-func CalculateDaLeTou(purchaseJSON, drawJSON string) (level int, name string, amount float64) {
+// CalculateDaLeTou 计算大乐透中奖（支持复式、追加）
+func CalculateDaLeTou(purchaseJSON, drawJSON string, multiple int, append bool) (level int, name string, amount float64) {
 	var purchase, draw DaLeTouNumbers
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
 		return 0, "未中奖", 0
@@ -108,13 +177,67 @@ func CalculateDaLeTou(purchaseJSON, drawJSON string) (level int, name string, am
 		return 0, "未中奖", 0
 	}
 
-	frontMatch := countMatch(purchase.Front, draw.Front)
-	backMatch := countMatch(purchase.Back, draw.Back)
+	// 单式投注：前区5个，后区2个
+	isMultiple := len(purchase.Front) > 5 || len(purchase.Back) > 2
 
-	for _, p := range daLeTouPrizes {
-		if frontMatch == p.front && backMatch == p.back {
-			return p.level, p.name, p.amount
+	if !isMultiple {
+		// 单式直接计算
+		frontMatch := countMatch(purchase.Front, draw.Front)
+		backMatch := countMatch(purchase.Back, draw.Back)
+
+		for _, p := range daLeTouPrizes {
+			if frontMatch == p.front && backMatch == p.back {
+				prize := p.amount * float64(multiple)
+				// 追加仅一至三等奖有效，奖金 × 1.6
+				if append && p.level <= 3 {
+					prize *= 1.6
+				}
+				return p.level, p.name, prize
+			}
 		}
+		return 0, "未中奖", 0
+	}
+
+	// 复式投注：计算所有组合，取最高奖级和总奖金
+	frontCombs := [][]int{purchase.Front}
+	backCombs := [][]int{purchase.Back}
+
+	if len(purchase.Front) > 5 {
+		frontCombs = combinations(purchase.Front, 5)
+	}
+	if len(purchase.Back) > 2 {
+		backCombs = combinations(purchase.Back, 2)
+	}
+
+	bestLevel := 0
+	bestName := "未中奖"
+	totalAmount := 0.0
+
+	for _, fronts := range frontCombs {
+		for _, backs := range backCombs {
+			frontMatch := countMatch(fronts, draw.Front)
+			backMatch := countMatch(backs, draw.Back)
+
+			for _, p := range daLeTouPrizes {
+				if frontMatch == p.front && backMatch == p.back {
+					prize := p.amount * float64(multiple)
+					// 追加仅一至三等奖有效，奖金 × 1.6
+					if append && p.level <= 3 {
+						prize *= 1.6
+					}
+					totalAmount += prize
+					if bestLevel == 0 || p.level < bestLevel {
+						bestLevel = p.level
+						bestName = p.name
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if bestLevel > 0 {
+		return bestLevel, bestName, totalAmount
 	}
 	return 0, "未中奖", 0
 }
@@ -125,7 +248,7 @@ type FuCai3DNumbers struct {
 	BetType string `json:"bet_type"` // 直选/组选6/组选3
 }
 
-func CalculateFuCai3D(purchaseJSON, drawJSON string) (level int, name string, amount float64) {
+func CalculateFuCai3D(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
 	var purchase FuCai3DNumbers
 	var drawNums []int
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
@@ -142,7 +265,7 @@ func CalculateFuCai3D(purchaseJSON, drawJSON string) (level int, name string, am
 	switch purchase.BetType {
 	case "直选":
 		if purchase.Numbers[0] == drawNums[0] && purchase.Numbers[1] == drawNums[1] && purchase.Numbers[2] == drawNums[2] {
-			return 1, "直选奖", 1040}
+			return 1, "直选奖", 1040 * float64(multiple)}
 	case "组选6":
 		p := make([]int, 3)
 		d := make([]int, 3)
@@ -151,7 +274,7 @@ func CalculateFuCai3D(purchaseJSON, drawJSON string) (level int, name string, am
 		sort.Ints(p)
 		sort.Ints(d)
 		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选6奖", 173}
+			return 2, "组选6奖", 173 * float64(multiple)}
 	case "组选3":
 		p := make([]int, 3)
 		d := make([]int, 3)
@@ -160,7 +283,7 @@ func CalculateFuCai3D(purchaseJSON, drawJSON string) (level int, name string, am
 		sort.Ints(p)
 		sort.Ints(d)
 		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选3奖", 346}
+			return 2, "组选3奖", 346 * float64(multiple)}
 	}
 	return 0, "未中奖", 0
 }
@@ -171,7 +294,7 @@ type PaiLieNumbers struct {
 	BetType string `json:"bet_type"` // 直选/组选
 }
 
-func CalculatePaiLie3(purchaseJSON, drawJSON string) (level int, name string, amount float64) {
+func CalculatePaiLie3(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
 	var purchase PaiLieNumbers
 	var drawNums []int
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
@@ -185,7 +308,7 @@ func CalculatePaiLie3(purchaseJSON, drawJSON string) (level int, name string, am
 	}
 	if purchase.BetType == "直选" {
 		if purchase.Numbers[0] == drawNums[0] && purchase.Numbers[1] == drawNums[1] && purchase.Numbers[2] == drawNums[2] {
-			return 1, "直选奖", 1000
+			return 1, "直选奖", 1000 * float64(multiple)
 		}
 	} else {
 		p := make([]int, 3)
@@ -195,13 +318,13 @@ func CalculatePaiLie3(purchaseJSON, drawJSON string) (level int, name string, am
 		sort.Ints(p)
 		sort.Ints(d)
 		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选奖", 167
+			return 2, "组选奖", 167 * float64(multiple)
 		}
 	}
 	return 0, "未中奖", 0
 }
 
-func CalculatePaiLie5(purchaseJSON, drawJSON string) (level int, name string, amount float64) {
+func CalculatePaiLie5(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
 	var purchase PaiLieNumbers
 	var drawNums []int
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
@@ -221,7 +344,7 @@ func CalculatePaiLie5(purchaseJSON, drawJSON string) (level int, name string, am
 		}
 	}
 	if match {
-		return 1, "直选奖", 100000
+		return 1, "直选奖", 100000 * float64(multiple)
 	}
 	return 0, "未中奖", 0
 }
@@ -254,7 +377,7 @@ var qiLeCaiPrizes = []struct {
 	{7, 0, 7, "七等奖", 5}, // 仅特别号
 }
 
-func CalculateQiLeCai(purchaseJSON, drawJSON string) (level int, name string, amount float64) {
+func CalculateQiLeCai(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
 	var purchase, draw QiLeCaiNumbers
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
 		return 0, "未中奖", 0
@@ -271,7 +394,7 @@ func CalculateQiLeCai(purchaseJSON, drawJSON string) (level int, name string, am
 
 	for _, p := range qiLeCaiPrizes {
 		if mainMatch == p.main && specialMatch == p.special {
-			return p.level, p.name, p.amount
+			return p.level, p.name, p.amount * float64(multiple)
 		}
 	}
 	return 0, "未中奖", 0

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, reactive, nextTick } from 'vue'
+import { ref, onMounted, computed, reactive, nextTick, watch } from 'vue'
 import { purchaseApi, winningApi, drawApi } from '../api'
 import NumberInput from '../components/NumberInput.vue'
+import Pagination from '../components/Pagination.vue'
 import type { PurchaseRecord, LotteryType, DrawResult } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
 import { Plus, Trash2, Edit2, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-vue-next'
@@ -29,6 +30,9 @@ const generateLuckyNumbers = (type: LotteryType): string => {
   const config = LOTTERY_CONFIGS.find(c => c.type === type)
   if (!config) return '{}'
 
+  // 允许重复的彩票类型（号码顺序有意义）
+  const allowDuplicate = type === '福彩3D' || type === '排列3' || type === '排列5' || type === '七星彩'
+
   const generateUnique = (min: number, max: number, count: number): number[] => {
     const nums = new Set<number>()
     while (nums.size < count) {
@@ -37,13 +41,21 @@ const generateLuckyNumbers = (type: LotteryType): string => {
     return Array.from(nums).sort((a, b) => a - b)
   }
 
-  const main = generateUnique(config.redRange.min, config.redRange.max, config.redRange.count)
+  const generateRandom = (min: number, max: number, count: number): number[] => {
+    return Array.from({ length: count }, () => Math.floor(Math.random() * (max - min + 1)) + min)
+  }
+
+  const main = allowDuplicate
+    ? generateRandom(config.redRange.min, config.redRange.max, config.redRange.count)
+    : generateUnique(config.redRange.min, config.redRange.max, config.redRange.count)
 
   if (!config.blueRange) {
     return JSON.stringify({ numbers: main })
   }
 
-  const blue = generateUnique(config.blueRange.min, config.blueRange.max, config.blueRange.count)
+  const blue = allowDuplicate
+    ? generateRandom(config.blueRange.min, config.blueRange.max, config.blueRange.count)
+    : generateUnique(config.blueRange.min, config.blueRange.max, config.blueRange.count)
 
   if (type === '双色球') {
     return JSON.stringify({ red: main, blue })
@@ -122,6 +134,9 @@ const confirmAddFromLucky = async () => {
       numbers: generatedNumbers.value,
       bet_type: '单式',
       amount: 2,
+      multiple: 1,
+      append: false,
+      periods: 1,
       remark: '幸运号'
     })
     showLuckyModal.value = false
@@ -154,7 +169,38 @@ const form = ref({
   numbers: '',
   bet_type: '单式',
   amount: 2,
+  multiple: 1,
+  append: false,
+  periods: 1,
   remark: ''
+})
+
+// 当前注数（从 NumberInput 组件获取）
+const currentBetCount = ref(1)
+
+const handleBetCountChange = (count: number) => {
+  currentBetCount.value = count
+  // 如果是复式，自动更新金额和投注方式
+  if (count > 1) {
+    form.value.bet_type = '复式'
+    form.value.amount = count * 2 * form.value.multiple * form.value.periods
+  } else {
+    form.value.bet_type = '单式'
+    form.value.amount = 2 * form.value.multiple * form.value.periods
+  }
+}
+
+// 计算金额
+const calculateAmount = () => {
+  const base = currentBetCount.value > 1 ? currentBetCount.value * 2 : 2
+  form.value.amount = base * form.value.multiple * form.value.periods
+}
+
+// 监听倍数和期数变化，自动更新金额
+watch([() => form.value.multiple, () => form.value.periods], () => {
+  if (!editingId.value) {
+    calculateAmount()
+  }
 })
 
 const betTypes = ['单式', '复式', '胆拖']
@@ -183,9 +229,14 @@ const loadPurchases = async () => {
   loading.value = true
   const res = await purchaseApi.list({
     lottery_type: filterType.value,
-    status: filterStatus.value
+    status: filterStatus.value,
+    page: currentPage.value,
+    size: pageSize.value
   }).catch(() => null)
-  if (res) purchases.value = res.data || []
+  if (res) {
+    purchases.value = res.data || []
+    total.value = res.total || 0
+  }
   // 加载开奖记录用于号码比对
   const drawRes = await drawApi.list({ size: 100 }).catch(() => null)
   if (drawRes) drawResults.value = drawRes.data || []
@@ -210,8 +261,12 @@ const openModal = (item?: PurchaseRecord) => {
       numbers: item.numbers,
       bet_type: item.bet_type,
       amount: item.amount,
+      multiple: item.multiple || 1,
+      append: item.append || false,
+      periods: item.periods || 1,
       remark: item.remark
     }
+    currentBetCount.value = 1
   } else {
     editingId.value = null
     form.value = {
@@ -221,8 +276,12 @@ const openModal = (item?: PurchaseRecord) => {
       numbers: '',
       bet_type: '单式',
       amount: 2,
+      multiple: 1,
+      append: false,
+      periods: 1,
       remark: ''
     }
+    currentBetCount.value = 1
   }
   showModal.value = true
   // 延迟触发一次 watch 确保 NumberInput 正确回填（因为 NumberInput 是 v-if 渲染的）
@@ -250,6 +309,9 @@ const savePurchase = async () => {
     numbers: form.value.numbers,
     bet_type: form.value.bet_type,
     amount: form.value.amount,
+    multiple: form.value.multiple,
+    append: form.value.append,
+    periods: form.value.periods,
     remark: form.value.remark
   }
   const isEdit = !!editingId.value
@@ -444,6 +506,14 @@ const highlightNumbers = (purchaseJson: string, drawJson: string | null, size: '
   return formatNumbers(purchaseJson)
 }
 
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+
+watch([currentPage, pageSize], () => {
+  loadPurchases()
+})
+
 const totalAmount = computed(() => {
   return purchases.value.reduce((sum, p) => sum + p.amount, 0)
 })
@@ -606,7 +676,16 @@ const recheckWinnings = async () => {
               </div>
             </div>
             <div class="flex items-center gap-4 text-xs text-slate-500">
-              <span>{{ item.bet_type }}</span>
+              <span class="flex items-center gap-1">
+                {{ item.bet_type }}
+                <span v-if="item.multiple > 1" class="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">
+                  {{ item.multiple }}倍
+                </span>
+                <span v-if="item.append" class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">追加</span>
+                <span v-if="item.periods > 1" class="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-medium">
+                  {{ item.periods }}期
+                </span>
+              </span>
               <span class="font-medium text-slate-700">¥{{ item.amount }}</span>
               <span v-if="getWinningAmount(item) > 0" class="font-bold text-emerald-600">中奖 ¥{{ getWinningAmount(item).toLocaleString() }}</span>
               <span>{{ item.purchase_date.split('T')[0] }}</span>
@@ -677,7 +756,18 @@ const recheckWinnings = async () => {
                     </span>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm text-slate-600">{{ item.bet_type }}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">
+                  <div class="flex items-center gap-1">
+                    {{ item.bet_type }}
+                    <span v-if="item.multiple > 1" class="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">
+                      {{ item.multiple }}倍
+                    </span>
+                    <span v-if="item.append" class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">追加</span>
+                    <span v-if="item.periods > 1" class="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-medium">
+                      {{ item.periods }}期
+                    </span>
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-sm text-slate-600">¥{{ item.amount }}</td>
                 <td class="px-4 py-3">
                   <span class="px-2 py-1 rounded-full text-xs font-medium" :class="statusColors[item.status]">
@@ -702,6 +792,13 @@ const recheckWinnings = async () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          v-if="total > 0"
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+        />
       </template>
     </div>
 
@@ -750,10 +847,39 @@ const recheckWinnings = async () => {
             <label class="block text-sm font-medium text-slate-600 mb-1.5">
               号码<span class="text-red-500 ml-0.5">*</span>
             </label>
-            <NumberInput v-model="form.numbers" :lottery-type="form.lottery_type" @update:modelValue="errors.numbers = ''" />
+            <NumberInput v-model="form.numbers" :lottery-type="form.lottery_type" @update:modelValue="errors.numbers = ''" @betCountChange="handleBetCountChange" />
             <p v-if="errors.numbers" class="mt-1 text-xs text-red-500 flex items-center gap-1">
               <span>⚠</span> {{ errors.numbers }}
             </p>
+          </div>
+
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">倍数</label>
+              <select v-model.number="form.multiple" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer">
+                <option v-for="n in 99" :key="n" :value="n">{{ n }} 倍</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">期数</label>
+              <select v-model.number="form.periods" :disabled="!!editingId" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed">
+                <option v-for="n in 10" :key="n" :value="n">{{ n }} 期</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">金额 (元)</label>
+              <input v-model.number="form.amount" type="number" step="0.5" min="0" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400" />
+            </div>
+          </div>
+
+          <div v-if="form.lottery_type === '大乐透'" class="flex items-center gap-2">
+            <input
+              id="append"
+              v-model="form.append"
+              type="checkbox"
+              class="w-4 h-4 text-blue-500 border-slate-300 rounded focus:ring-blue-400 cursor-pointer"
+            />
+            <label for="append" class="text-sm text-slate-600 cursor-pointer">追加投注 (+1元/注，一至三等奖奖金 × 1.6)</label>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
@@ -764,14 +890,9 @@ const recheckWinnings = async () => {
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-slate-600 mb-1.5">金额 (元)</label>
-              <input v-model.number="form.amount" type="number" step="0.5" min="0" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400" />
+              <label class="block text-sm font-medium text-slate-600 mb-1.5">备注</label>
+              <input v-model="form.remark" placeholder="可选" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400" />
             </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-slate-600 mb-1.5">备注</label>
-            <input v-model="form.remark" placeholder="可选" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400" />
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"lottery-backend/models"
 	"lottery-backend/services"
 	"net/http"
@@ -20,6 +21,9 @@ type CreatePurchaseRequest struct {
 	Numbers      string  `json:"numbers" binding:"required"`
 	BetType      string  `json:"bet_type"`
 	Amount       float64 `json:"amount" binding:"required,gt=0"`
+	Multiple     int     `json:"multiple"`
+	Append       bool    `json:"append"`
+	Periods      int     `json:"periods"`
 	Remark       string  `json:"remark"`
 }
 
@@ -42,26 +46,83 @@ func CreatePurchase(c *gin.Context) {
 		betType = models.DanShi
 	}
 
+	// 参数默认值与校验
+	multiple := req.Multiple
+	if multiple < 1 {
+		multiple = 1
+	}
+	if multiple > 99 {
+		multiple = 99
+	}
+
+	periods := req.Periods
+	if periods < 1 {
+		periods = 1
+	}
+	if periods > 10 {
+		periods = 10
+	}
+
 	// 获取当前用户ID
 	userID, _ := c.Get("user_id")
 
-	purchase := &models.PurchaseRecord{
-		UserID:       userID.(uint),
-		LotteryType:  models.LotteryType(req.LotteryType),
-		IssueNumber:  req.IssueNumber,
-		PurchaseDate: purchaseDate,
-		Numbers:      req.Numbers,
-		BetType:      betType,
-		Amount:       req.Amount,
-		Remark:       req.Remark,
-		Status:       "待开奖",
-	}
+	// 单期投注
+	if periods == 1 {
+		purchase := &models.PurchaseRecord{
+			UserID:       userID.(uint),
+			LotteryType:  models.LotteryType(req.LotteryType),
+			IssueNumber:  req.IssueNumber,
+			PurchaseDate: purchaseDate,
+			Numbers:      req.Numbers,
+			BetType:      betType,
+			Amount:       req.Amount,
+			Multiple:     multiple,
+			Append:       req.Append,
+			Periods:      1,
+			Remark:       req.Remark,
+			Status:       "待开奖",
+		}
 
-	if err := purchaseService.CreatePurchase(purchase); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建记录失败: " + err.Error()})
+		if err := purchaseService.CreatePurchase(purchase); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建记录失败: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"data": purchase, "message": "创建成功"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": purchase, "message": "创建成功"})
+
+	// 多期投注：拆分为多条记录，期号递增
+	var createdRecords []models.PurchaseRecord
+	for i := 0; i < periods; i++ {
+		issueNum := req.IssueNumber
+		if i > 0 {
+			// 尝试将期号解析为数字并递增
+			if n, err := strconv.Atoi(req.IssueNumber); err == nil {
+				issueNum = fmt.Sprintf("%d", n+i)
+			}
+		}
+		purchase := &models.PurchaseRecord{
+			UserID:       userID.(uint),
+			LotteryType:  models.LotteryType(req.LotteryType),
+			IssueNumber:  issueNum,
+			PurchaseDate: purchaseDate,
+			Numbers:      req.Numbers,
+			BetType:      betType,
+			Amount:       req.Amount,
+			Multiple:     multiple,
+			Append:       req.Append,
+			Periods:      periods,
+			Remark:       req.Remark,
+			Status:       "待开奖",
+		}
+		if err := purchaseService.CreatePurchase(purchase); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建多期记录失败: " + err.Error()})
+			return
+		}
+		createdRecords = append(createdRecords, *purchase)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": createdRecords, "message": "创建成功，共 " + strconv.Itoa(periods) + " 期"})
 }
 
 // GetPurchases GET /api/purchases

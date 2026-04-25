@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, watch } from 'vue'
 import { drawApi, winningApi } from '../api'
 import NumberInput from '../components/NumberInput.vue'
+import Pagination from '../components/Pagination.vue'
 import type { DrawResult, LotteryType } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
 import { Plus, Trash2, Edit2, X, RefreshCw, Award, AlertCircle, CheckCircle, Download } from 'lucide-vue-next'
@@ -60,10 +61,25 @@ const validateForm = () => {
 const lotteryTypes = LOTTERY_CONFIGS.map(c => c.type)
 const fetchableTypes = ['双色球', '大乐透', '福彩3D', '排列3', '排列5', '七星彩']
 
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+
+watch([currentPage, pageSize], () => {
+  loadDraws()
+})
+
 const loadDraws = async () => {
   loading.value = true
-  const res = await drawApi.list({ lottery_type: filterType.value }).catch(() => null)
-  if (res) draws.value = res.data || []
+  const res = await drawApi.list({
+    lottery_type: filterType.value,
+    page: currentPage.value,
+    size: pageSize.value
+  }).catch(() => null)
+  if (res) {
+    draws.value = res.data || []
+    total.value = res.total || 0
+  }
   loading.value = false
 }
 
@@ -395,6 +411,13 @@ const fetchBatchDraws = async () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          v-if="total > 0"
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+        />
       </template>
     </div>
 

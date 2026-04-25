@@ -64,12 +64,15 @@ export interface CreatePurchasePayload {
   numbers: string
   bet_type: string
   amount: number
+  multiple?: number
+  append?: boolean
+  periods?: number
   remark?: string
 }
 
 export const purchaseApi = {
   create: (data: CreatePurchasePayload) => api.post('/purchases', data),
-  list: (params?: { lottery_type?: string; status?: string; page?: number; size?: number }) =>
+  list: (params?: { lottery_type?: string; status?: string; page?: number; size?: number }): Promise<ListResponse<PurchaseRecord>> =>
     api.get('/purchases', { params }),
   update: (id: number, data: Partial<CreatePurchasePayload>) => api.put(`/purchases/${id}`, data),
   delete: (id: number) => api.delete(`/purchases/${id}`),
@@ -83,9 +86,14 @@ export interface CreateDrawPayload {
   numbers: string
 }
 
+export interface ListResponse<T> {
+  data: T[]
+  total: number
+}
+
 export const drawApi = {
   create: (data: CreateDrawPayload) => api.post('/draws', data),
-  list: (params?: { lottery_type?: string; page?: number; size?: number }) =>
+  list: (params?: { lottery_type?: string; page?: number; size?: number }): Promise<ListResponse<DrawResult>> =>
     api.get('/draws', { params }),
   update: (id: number, data: Partial<CreateDrawPayload>) => api.put(`/draws/${id}`, data),
   delete: (id: number) => api.delete(`/draws/${id}`),
@@ -97,7 +105,7 @@ export const drawApi = {
 
 // ===== 中奖记录 API =====
 export const winningApi = {
-  list: (params?: { lottery_type?: string; page?: number; size?: number }) =>
+  list: (params?: { lottery_type?: string; page?: number; size?: number }): Promise<ListResponse<WinningRecord>> =>
     api.get('/winnings', { params }),
   recheck: () => api.post('/winnings/recheck'),
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { winningApi } from '../api'
+import Pagination from '../components/Pagination.vue'
 import type { WinningRecord } from '../types'
 import { Trophy, Gift, TrendingUp } from 'lucide-vue-next'
 
@@ -8,10 +9,25 @@ const winnings = ref<WinningRecord[]>([])
 const loading = ref(false)
 const filterType = ref('')
 
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+
+watch([currentPage, pageSize], () => {
+  loadWinnings()
+})
+
 const loadWinnings = async () => {
   loading.value = true
-  const res = await winningApi.list({ lottery_type: filterType.value }).catch(() => null)
-  if (res) winnings.value = res.data || []
+  const res = await winningApi.list({
+    lottery_type: filterType.value,
+    page: currentPage.value,
+    size: pageSize.value
+  }).catch(() => null)
+  if (res) {
+    winnings.value = res.data || []
+    total.value = res.total || 0
+  }
   loading.value = false
 }
 
@@ -207,5 +223,12 @@ const totalWinning = () => winnings.value.reduce((sum, w) => sum + w.prize_amoun
         </div>
       </div>
     </div>
+
+    <Pagination
+      v-if="total > 0"
+      v-model:current-page="currentPage"
+      v-model:page-size="pageSize"
+      :total="total"
+    />
   </div>
 </template>
