@@ -179,6 +179,7 @@ func main() {
 	// 启动定时抓取任务
 	schedulerSvc := services.NewSchedulerService()
 	schedulerSvc.Start()
+	handlers.SchedulerService = schedulerSvc
 	defer schedulerSvc.Stop()
 
 	// 根据环境设置 Gin 模式（默认生产模式，关闭调试日志）
