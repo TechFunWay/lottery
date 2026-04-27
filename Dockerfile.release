@@ -1,0 +1,15 @@
+FROM scratch
+
+WORKDIR /app
+
+ARG TARGETARCH
+ARG VERSION
+
+COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-${TARGETARCH}/lottery /app/lottery
+COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/index.html /app/index.html
+COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/lottery-web /app/lottery-web
+
+EXPOSE 8902
+
+ENTRYPOINT ["/app/lottery"]
+CMD ["-data-dir", "/app/data", "-web-dir", "/app", "-device-type", "docker"]
