@@ -157,14 +157,14 @@ var daLeTouPrizes = []struct {
 	{5, 0, 3, "三等奖", 10000},
 	{4, 2, 4, "四等奖", 3000},
 	{4, 1, 5, "五等奖", 300},
-	{3, 2, 5, "五等奖", 300},
-	{4, 0, 6, "六等奖", 100},
-	{3, 1, 6, "六等奖", 100},
-	{2, 2, 6, "六等奖", 100},
-	{3, 0, 7, "七等奖", 15},
-	{2, 1, 7, "七等奖", 15},
-	{1, 2, 7, "七等奖", 15},
-	{0, 2, 7, "七等奖", 15},
+	{3, 2, 6, "六等奖", 200},
+	{4, 0, 7, "七等奖", 100},
+	{3, 1, 8, "八等奖", 15},
+	{2, 2, 8, "八等奖", 15},
+	{3, 0, 9, "九等奖", 5},
+	{2, 1, 9, "九等奖", 5},
+	{1, 2, 9, "九等奖", 5},
+	{0, 2, 9, "九等奖", 5},
 }
 
 // CalculateDaLeTou 计算大乐透中奖（支持复式、追加）
@@ -295,7 +295,7 @@ type PaiLieNumbers struct {
 }
 
 func CalculatePaiLie3(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
-	var purchase PaiLieNumbers
+	var purchase FuCai3DNumbers
 	var drawNums []int
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
 		return 0, "未中奖", 0
@@ -306,11 +306,11 @@ func CalculatePaiLie3(purchaseJSON, drawJSON string, multiple int) (level int, n
 	if len(purchase.Numbers) != 3 || len(drawNums) != 3 {
 		return 0, "未中奖", 0
 	}
-	if purchase.BetType == "直选" {
+	switch purchase.BetType {
+	case "直选":
 		if purchase.Numbers[0] == drawNums[0] && purchase.Numbers[1] == drawNums[1] && purchase.Numbers[2] == drawNums[2] {
-			return 1, "直选奖", 1000 * float64(multiple)
-		}
-	} else {
+			return 1, "直选奖", 1040 * float64(multiple)}
+	case "组选6":
 		p := make([]int, 3)
 		d := make([]int, 3)
 		copy(p, purchase.Numbers)
@@ -318,8 +318,16 @@ func CalculatePaiLie3(purchaseJSON, drawJSON string, multiple int) (level int, n
 		sort.Ints(p)
 		sort.Ints(d)
 		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选奖", 167 * float64(multiple)
-		}
+			return 2, "组选6奖", 173 * float64(multiple)}
+	case "组选3":
+		p := make([]int, 3)
+		d := make([]int, 3)
+		copy(p, purchase.Numbers)
+		copy(d, drawNums)
+		sort.Ints(p)
+		sort.Ints(d)
+		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
+			return 2, "组选3奖", 346 * float64(multiple)}
 	}
 	return 0, "未中奖", 0
 }
@@ -369,12 +377,10 @@ var qiLeCaiPrizes = []struct {
 	{7, 0, 1, "一等奖", 5000000},
 	{6, 1, 2, "二等奖", 10000},
 	{6, 0, 3, "三等奖", 1000},
-	{5, 1, 4, "四等奖", 100},
-	{5, 0, 4, "四等奖", 100},
-	{4, 1, 5, "五等奖", 30},
-	{4, 0, 5, "五等奖", 30},
-	{3, 1, 6, "六等奖", 10},
-	{7, 0, 7, "七等奖", 5}, // 仅特别号
+	{5, 1, 4, "四等奖", 200},
+	{5, 0, 5, "五等奖", 50},
+	{4, 1, 6, "六等奖", 10},
+	{4, 0, 7, "七等奖", 5},
 }
 
 func CalculateQiLeCai(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
