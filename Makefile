@@ -155,8 +155,8 @@ release:
 	
 	# 步骤2: 跨平台编译
 	@echo -e "$(YELLOW)📦 步骤2: 跨平台编译$(NC)"
-	@if [ -f ".codebuddy/skills/cross-platform-compile/scripts/compile.sh" ]; then \
-		.codebuddy/skills/cross-platform-compile/scripts/compile.sh; \
+	@if [ -f ".skill/cross-platform-compile/scripts/compile.sh" ]; then \
+		.skill/cross-platform-compile/scripts/compile.sh; \
 	else \
 		echo -e "$(RED)❌ 错误: 跨平台编译脚本不存在$(NC)"; \
 		exit 1; \
@@ -164,8 +164,8 @@ release:
 	
 	# 步骤3: 打包飞牛应用
 	@echo -e "$(YELLOW)📦 步骤3: 打包飞牛应用$(NC)"
-	@if [ -f ".codebuddy/skills/fnnas-packager/scripts/package-multiplatform.sh" ]; then \
-		.codebuddy/skills/fnnas-packager/scripts/package-multiplatform.sh; \
+	@if [ -f ".skill/fnnas-packager/scripts/package-multiplatform.sh" ]; then \
+		.skill/fnnas-packager/scripts/package-multiplatform.sh; \
 	else \
 		echo -e "$(RED)❌ 错误: 飞牛打包脚本不存在$(NC)"; \
 		exit 1; \

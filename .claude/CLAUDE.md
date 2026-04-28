@@ -23,10 +23,10 @@ make dev
 make release
 
 # Cross-platform compile only (outputs to release/{version}/)
-.codebuddy/skills/cross-platform-compile/scripts/compile.sh
+.skill/cross-platform-compile/scripts/compile.sh
 
 # Build Docker multi-arch image (uses pre-compiled Linux binaries)
-bash .trae/skills/docker-builder/scripts/docker_builder.sh
+bash .skill/docker-builder/scripts/docker_builder.sh
 
 # Single test / run backend directly
 cd backend && go run main.go
