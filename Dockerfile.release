@@ -8,6 +8,7 @@ ARG VERSION
 COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-${TARGETARCH}/lottery /app/lottery
 COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/index.html /app/index.html
 COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/lottery-web /app/lottery-web
+COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/img /app/img
 
 EXPOSE 8902
 
