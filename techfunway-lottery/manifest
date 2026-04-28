@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.0.0
+version               = 1.1.0
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
 platform              = x86
@@ -10,4 +10,16 @@ distributor           = 科技智趣坊
 distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
-changelog             = 彩彩助手更新
+changelog             = """
+v1.1.0 更新内容
+  新功能
+  - 竞彩足球：完整的足球赛事管理、投注、开奖结果抓取、盈亏概览
+  - 定时抓取：每日凌晨 2:00 自动从 API 抓取最新开奖号码，抓取后自动计算中奖
+  - 手动触发抓取：可在管理页面随时触发
+  Bug 修复
+  - 大乐透奖金表：按 2023 年后规则修正 8 个奖级（0+2 从 15 元→5 元等）
+  - 七乐彩奖金表：修正 4 项金额（四等奖 100→200、五等奖 100→50、六等奖 30→10、七等奖 30→5），删除无效的 3+1 奖项
+  - 排列3：直选 1000→1040 元；组选拆分为组选3（346 元）和组选6（173 元）
+  - 福彩3D：支持重复号码（如 112）的正确组选计算
+  - 复式投注：修复复式投注中奖计算逻辑
+"""
