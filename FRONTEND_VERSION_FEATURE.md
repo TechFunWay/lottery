@@ -139,17 +139,17 @@ const loadVersionInfo = async () => {
 #### 重新编译前端
 ```bash
 cd /Users/weiyi/develop/gitee/TechFunWay/lottery
-.codebuddy/skills/frontend-build/scripts/build.sh
+.skill/frontend-build/scripts/build.sh
 ```
 
 #### 重新编译所有平台后端
 ```bash
-.codebuddy/skills/cross-platform-compile/scripts/compile.sh v1.0.0
+.skill/cross-platform-compile/scripts/compile.sh v1.0.0
 ```
 
 #### 重新打包飞牛NAS应用
 ```bash
-.codebuddy/skills/fnnas-packager/scripts/package-multiplatform.sh
+.skill/fnnas-packager/scripts/package-multiplatform.sh
 ```
 
 ### 10. **最终效果** ✅
