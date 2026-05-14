@@ -177,16 +177,8 @@ const handleInput = (index: number, type: 'main' | 'blue', event: Event) => {
     return
   }
 
-  // 检查重复号码（福彩3D、排列3、排列5、七星彩允许重复）
-  const allowDuplicate = props.lotteryType === '福彩3D' || props.lotteryType === '排列3' || props.lotteryType === '排列5' || props.lotteryType === '七星彩'
-  if (!allowDuplicate) {
-    const currentArray = type === 'main' ? mainNumbers.value : blueNumbers.value
-    const existingIndex = currentArray.findIndex((n, i) => i !== index && n === val)
-    if (existingIndex !== -1) {
-      errors.value = [`号码 ${val} 已存在`]
-      return
-    }
-  }
+  // 不在此处做重复号校验：用户在输入两位数时（如"10"），首字符"1"会误触重复
+  // 重复校验放在 handleBlur 中统一处理
 
   if (type === 'main') {
     mainNumbers.value[index] = val
