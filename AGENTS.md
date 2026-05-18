@@ -67,12 +67,13 @@ Individual steps can be run via `.skill/` scripts directly. Docker multi-arch bu
 ## Git Commit
 
 - **Language**: 全中文
-- **Format**: `类型：描述` — 如 `新增：`、`修复：`、`更新：`、`修正：`、`升级：`、`同步：`
+- **Format**: `类型：描述` — 如 `新增：`、`修复：`、`更新：`、`修正：`、`发版：`、`同步：`
+- **Workflow**: 不要直接提交推送。写好备注后先询问用户确认，确认通过后方可提交推送。
 - Examples from history:
   ```
   新增：OpenCode 会话指南 AGENTS.md
   修复：双色球输入两位数时重复校验误触导致输入被清除
+  发版：v1.1.1
   同步飞牛应用 v1.1.0 编译产物及更新日志
-  升级版本号至 v1.1.0
   修正：大乐透/七乐透奖金表、排列3计算逻辑；修复定时器实例双份问题
   ```
