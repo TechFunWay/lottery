@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.1.0
+version               = 1.1.1
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
 platform              = x86
@@ -11,6 +11,10 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
 changelog             = """
+v1.1.1 更新内容
+   Bug 修复
+   - 修复：双色球输入两位数时重复校验误触导致输入被清除
+
 v1.1.0 更新内容
   新功能
   - 竞彩足球：完整的足球赛事管理、投注、开奖结果抓取、盈亏概览
