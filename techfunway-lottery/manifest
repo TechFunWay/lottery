@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.1.1
+version               = 1.1.2
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
 platform              = x86
@@ -11,6 +11,14 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
 changelog             = """
+v1.1.2 更新内容
+   改进
+   - 定时抓取：启动后立即执行一次，不再等待至凌晨 2 点
+   - 定时抓取：新增早 6:00 / 中午 12:00 / 晚 21:30 多时段自动抓取
+   Bug 修复
+   - 修复定时器实例双份问题，确保手动触发与自动定时共用同一实例
+   - 修复并发抓取可能导致的重复请求问题
+
 v1.1.1 更新内容
    Bug 修复
    - 修复：双色球输入两位数时重复校验误触导致输入被清除
