@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import type { LotteryType } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
 
@@ -21,6 +21,33 @@ const blueNumbers = ref<(number | null)[]>([])
 
 // 错误提示
 const errors = ref<string[]>([])
+
+// 输入框 DOM 引用（用于自动跳焦）
+const mainInputs = ref<HTMLInputElement[]>([])
+const blueInputs = ref<HTMLInputElement[]>([])
+const setMainRef = (el: any, i: number) => { if (el) mainInputs.value[i] = el }
+const setBlueRef = (el: any, i: number) => { if (el) blueInputs.value[i] = el }
+
+// 跳到下一个输入框：主号填满后进入蓝球，蓝球填满后失焦
+const focusNext = (index: number, type: 'main' | 'blue') => {
+  nextTick(() => {
+    if (type === 'main') {
+      if (index + 1 < mainNumbers.value.length) {
+        mainInputs.value[index + 1]?.focus()
+      } else if (blueNumbers.value.length > 0) {
+        blueInputs.value[0]?.focus()
+      } else {
+        mainInputs.value[index]?.blur()
+      }
+    } else {
+      if (index + 1 < blueNumbers.value.length) {
+        blueInputs.value[index + 1]?.focus()
+      } else {
+        blueInputs.value[index]?.blur()
+      }
+    }
+  })
+}
 
 // 初始化号码数组
 const initNumbers = () => {
@@ -186,6 +213,19 @@ const handleInput = (index: number, type: 'main' | 'blue', event: Event) => {
     blueNumbers.value[index] = val
   }
   updateValue()
+
+  // 满位（达到该类型号码最大位数，如两位数）自动跳到下一个输入框
+  const maxDigits = String(max).length
+  if (rawVal.length >= maxDigits) {
+    focusNext(index, type)
+  }
+}
+
+// 回车确认当前输入并跳到下一个（用于只输入一位数的情况）
+const handleEnter = (index: number, type: 'main' | 'blue', event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.value.trim() === '') return
+  focusNext(index, type)
 }
 
 const handleBlur = (index: number, type: 'main' | 'blue', event: Event) => {
@@ -249,15 +289,16 @@ const handleBlur = (index: number, type: 'main' | 'blue', event: Event) => {
   }
 
   // 有效值，自动排序（福彩3D、排列3、排列5、七星彩不排序）
+  // 仅当该组号码全部输入完毕后才排序，避免输入过程中号码跳动
   const noSort = props.lotteryType === '福彩3D' || props.lotteryType === '排列3' || props.lotteryType === '排列5' || props.lotteryType === '七星彩'
   if (!noSort) {
-    if (type === 'main') {
+    if (type === 'main' && mainNumbers.value.length > 0 && mainNumbers.value.every(n => n !== null)) {
       const filled = mainNumbers.value.filter(n => n !== null).sort((a, b) => a! - b!)
       // 保持数组长度不变，用 null 填充
       const newArr = Array(mainNumbers.value.length).fill(null)
       filled.forEach((n, i) => { if (n !== null) newArr[i] = n })
       mainNumbers.value = newArr
-    } else if (blueNumbers.value.length > 0) {
+    } else if (type === 'blue' && blueNumbers.value.length > 0 && blueNumbers.value.every(n => n !== null)) {
       const filled = blueNumbers.value.filter(n => n !== null).sort((a, b) => a! - b!)
       const newArr = Array(blueNumbers.value.length).fill(null)
       filled.forEach((n, i) => { if (n !== null) newArr[i] = n })
@@ -346,10 +387,35 @@ const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
 
 // 是否支持复式
 const supportsMultiple = computed(() => props.lotteryType === '双色球' || props.lotteryType === '大乐透')
+
+// 是否已有任何号码输入
+const hasAnyValue = computed(() =>
+  mainNumbers.value.some(n => n !== null) || blueNumbers.value.some(n => n !== null)
+)
+
+// 一键清空当前所有输入
+const clearAll = () => {
+  errors.value = []
+  mainNumbers.value = mainNumbers.value.map(() => null)
+  blueNumbers.value = blueNumbers.value.map(() => null)
+  updateValue()
+  nextTick(() => mainInputs.value[0]?.focus())
+}
 </script>
 
 <template>
   <div class="space-y-4">
+    <!-- 工具栏：清空 -->
+    <div v-if="hasAnyValue" class="flex justify-end">
+      <button
+        type="button"
+        @click="clearAll"
+        class="text-xs text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+      >
+        清空号码
+      </button>
+    </div>
+
     <!-- 错误提示 -->
     <div v-if="errors.length > 0" class="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
       <span class="text-red-500 text-sm">⚠</span>
@@ -389,12 +455,14 @@ const supportsMultiple = computed(() => props.lotteryType === '双色球' || pro
           class="relative"
         >
           <input
+            :ref="(el) => setMainRef(el, i)"
             type="number"
             :value="num ?? ''"
             :min="mainMin"
             :max="mainMax"
             placeholder="--"
             @input="handleInput(i, 'main', $event)"
+            @keydown.enter.prevent="handleEnter(i, 'main', $event)"
             @blur="handleBlur(i, 'main', $event)"
             class="w-14 h-12 text-center text-sm font-bold rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none transition-all
               bg-gradient-to-b from-red-50 to-white text-red-600
@@ -436,12 +504,14 @@ const supportsMultiple = computed(() => props.lotteryType === '双色球' || pro
           :key="i"
         >
           <input
+            :ref="(el) => setBlueRef(el, i)"
             type="number"
             :value="num ?? ''"
             :min="blueMin"
             :max="blueMax"
             placeholder="--"
             @input="handleInput(i, 'blue', $event)"
+            @keydown.enter.prevent="handleEnter(i, 'blue', $event)"
             @blur="handleBlur(i, 'blue', $event)"
             class="w-14 h-12 text-center text-sm font-bold rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none transition-all
               bg-gradient-to-b from-blue-50 to-white text-blue-600

@@ -285,6 +285,7 @@ func main() {
 			// 中奖记录
 			authorized.GET("/winnings", handlers.GetWinnings)
 			authorized.POST("/winnings/recheck", handlers.RecheckWinnings)
+			authorized.PUT("/winnings/:id", handlers.UpdateWinning)
 
 			// 统计分析
 			authorized.GET("/statistics/overview", handlers.GetOverview)

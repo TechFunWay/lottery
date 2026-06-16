@@ -81,6 +81,7 @@ export interface WinningRecord {
   prize_level: number
   prize_name: string
   prize_amount: number
+  manual_amount: number | null
   purchase: PurchaseRecord
   draw: DrawResult
   created_at: string

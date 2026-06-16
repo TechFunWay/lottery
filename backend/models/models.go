@@ -73,7 +73,8 @@ type WinningRecord struct {
 	IssueNumber string      `json:"issue_number" gorm:"not null"`
 	PrizeLevel  int         `json:"prize_level"` // 0=未中奖, 1=一等奖, ...
 	PrizeName   string      `json:"prize_name"`  // 如：一等奖、二等奖
-	PrizeAmount float64     `json:"prize_amount"`
+	PrizeAmount float64     `json:"prize_amount"`             // 系统计算的奖金
+	ManualAmount *float64   `json:"manual_amount"`            // 手动调整后的奖金（如活动翻倍），非空时以此为准，重算不覆盖
 	Purchase    PurchaseRecord `json:"purchase" gorm:"foreignKey:PurchaseID"`
 	Draw        DrawResult     `json:"draw" gorm:"foreignKey:DrawID"`
 }

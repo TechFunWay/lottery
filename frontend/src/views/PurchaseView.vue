@@ -5,7 +5,7 @@ import NumberInput from '../components/NumberInput.vue'
 import Pagination from '../components/Pagination.vue'
 import type { PurchaseRecord, LotteryType, DrawResult } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
-import { Plus, Trash2, Edit2, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-vue-next'
+import { Plus, Trash2, Edit2, Copy, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-vue-next'
 
 const purchases = ref<PurchaseRecord[]>([])
 const drawResults = ref<DrawResult[]>([])
@@ -248,6 +248,68 @@ const loadPurchases = async () => {
 
 onMounted(loadPurchases)
 
+// ===== 按彩票类型记忆上次填写的号码 =====
+const lastNumbersKey = (type: string) => `lottery:lastNumbers:${type}`
+
+const getLastNumbers = (type: LotteryType): string => {
+  try {
+    return localStorage.getItem(lastNumbersKey(type)) || ''
+  } catch {
+    return ''
+  }
+}
+
+const saveLastNumbers = (type: LotteryType, numbers: string) => {
+  try {
+    if (numbers && numbers !== '[]') localStorage.setItem(lastNumbersKey(type), numbers)
+  } catch {
+    // ignore
+  }
+}
+
+// 触发 NumberInput 重新回填号码（因其 v-if 渲染且依赖 modelValue 变化）
+const refillNumbers = () => {
+  setTimeout(() => {
+    if (form.value.numbers) {
+      const temp = form.value.numbers
+      form.value.numbers = ''
+      form.value.numbers = temp
+    }
+  }, 0)
+}
+
+// 新增模式下切换彩票类型时，回填该类型上次保存的号码
+const onLotteryTypeChange = () => {
+  if (editingId.value) return
+  const last = getLastNumbers(form.value.lottery_type)
+  form.value.numbers = ''
+  nextTick(() => {
+    form.value.numbers = last
+  })
+}
+
+// 复制一条购买记录：保留号码等，清空期号、日期改为今天，作为新记录
+const copyPurchase = (item: PurchaseRecord) => {
+  errors.issue_number = ''
+  errors.numbers = ''
+  editingId.value = null
+  form.value = {
+    lottery_type: item.lottery_type,
+    issue_number: '',
+    purchase_date: new Date().toISOString().split('T')[0],
+    numbers: item.numbers,
+    bet_type: item.bet_type,
+    amount: item.amount,
+    multiple: item.multiple || 1,
+    append: item.append || false,
+    periods: item.periods || 1,
+    remark: item.remark
+  }
+  currentBetCount.value = 1
+  showModal.value = true
+  refillNumbers()
+}
+
 const openModal = (item?: PurchaseRecord) => {
   // 清空校验错误
   errors.issue_number = ''
@@ -273,7 +335,7 @@ const openModal = (item?: PurchaseRecord) => {
       lottery_type: '双色球',
       issue_number: '',
       purchase_date: new Date().toISOString().split('T')[0],
-      numbers: '',
+      numbers: getLastNumbers('双色球'),
       bet_type: '单式',
       amount: 2,
       multiple: 1,
@@ -285,14 +347,7 @@ const openModal = (item?: PurchaseRecord) => {
   }
   showModal.value = true
   // 延迟触发一次 watch 确保 NumberInput 正确回填（因为 NumberInput 是 v-if 渲染的）
-  setTimeout(() => {
-    if (item && form.value.numbers) {
-      // 触发一次 numbers 的响应式更新
-      const temp = form.value.numbers
-      form.value.numbers = ''
-      form.value.numbers = temp
-    }
-  }, 0)
+  refillNumbers()
 }
 
 const closeModal = () => {
@@ -320,6 +375,8 @@ const savePurchase = async () => {
       await purchaseApi.update(editingId.value, payload)
     } else {
       await purchaseApi.create(payload)
+      // 记住该彩票类型本次填写的号码，下次新增时自动回填
+      saveLastNumbers(payload.lottery_type, payload.numbers)
     }
     closeModal()
     // 自动触发中奖检查
@@ -451,7 +508,9 @@ const getWinningAmount = (purchase: PurchaseRecord): number => {
   const winning = winningRecords.value.find(
     w => w.purchase?.id === purchase.id
   )
-  return winning?.prize_amount || 0
+  if (!winning) return 0
+  // 优先使用手动调整后的金额
+  return winning.manual_amount != null ? winning.manual_amount : (winning.prize_amount || 0)
 }
 
 // 获取购买记录对应的中奖信息
@@ -624,6 +683,9 @@ const recheckWinnings = async () => {
                 </span>
               </div>
               <div class="flex items-center gap-1 shrink-0 ml-2">
+                <button @click="copyPurchase(item)" class="p-1.5 text-slate-400 hover:text-emerald-500 cursor-pointer" title="复制">
+                  <Copy class="w-4 h-4" />
+                </button>
                 <button @click="openModal(item)" class="p-1.5 text-slate-400 hover:text-blue-500 cursor-pointer">
                   <Edit2 class="w-4 h-4" />
                 </button>
@@ -781,6 +843,9 @@ const recheckWinnings = async () => {
                 </td>
                 <td class="px-4 py-3 text-sm text-slate-500">{{ item.purchase_date.split('T')[0] }}</td>
                 <td class="px-4 py-3 text-right">
+                  <button @click="copyPurchase(item)" class="p-1.5 text-slate-400 hover:text-emerald-500 cursor-pointer" title="复制">
+                    <Copy class="w-4 h-4" />
+                  </button>
                   <button @click="openModal(item)" class="p-1.5 text-slate-400 hover:text-blue-500 cursor-pointer">
                     <Edit2 class="w-4 h-4" />
                   </button>
@@ -816,7 +881,7 @@ const recheckWinnings = async () => {
         <div class="p-6 space-y-4">
           <div>
             <label class="block text-sm font-medium text-slate-600 mb-1.5">彩票类型</label>
-            <select v-model="form.lottery_type" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer">
+            <select v-model="form.lottery_type" @change="onLotteryTypeChange" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer">
               <option v-for="t in lotteryTypes" :key="t" :value="t">{{ t }}</option>
             </select>
           </div>

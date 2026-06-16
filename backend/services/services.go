@@ -691,6 +691,16 @@ func (s *WinningService) CheckAndSaveWinnings(drawID uint) error {
 
 	for _, purchase := range purchases {
 		winning := s.CalculateWinning(&purchase, &draw)
+
+		// 读取旧记录中用户手动调整的奖金，重算时保留（如活动翻倍）
+		var oldWinning models.WinningRecord
+		if err := database.DB.Where("purchase_id = ? AND draw_id = ?", purchase.ID, drawID).First(&oldWinning).Error; err == nil {
+			if oldWinning.ManualAmount != nil {
+				manual := *oldWinning.ManualAmount
+				winning.ManualAmount = &manual
+			}
+		}
+
 		// 保存中奖记录（先硬删除旧的）
 		database.DB.Unscoped().Where("purchase_id = ? AND draw_id = ?", purchase.ID, drawID).Delete(&models.WinningRecord{})
 
