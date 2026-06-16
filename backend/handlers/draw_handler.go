@@ -269,6 +269,43 @@ func RecheckWinnings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "正在重新计算中奖记录"})
 }
 
+// UpdateWinning PUT /api/winnings/:id - 手动调整中奖金额（活动翻倍等）
+// 请求体 {"manual_amount": 100} 设置手动金额；{"manual_amount": null} 还原为系统计算金额
+func UpdateWinning(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	var req struct {
+		ManualAmount *float64 `json:"manual_amount"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+	if req.ManualAmount != nil && *req.ManualAmount < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "金额不能为负数"})
+		return
+	}
+
+	db := services.GetDB()
+	var winning models.WinningRecord
+	if err := db.First(&winning, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "中奖记录不存在"})
+		return
+	}
+
+	// 用 Select 显式更新该字段，确保 nil 也能写入（还原）
+	if err := db.Model(&winning).Select("ManualAmount").Update("manual_amount", req.ManualAmount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": winning})
+}
+
 // FetchAutoDraws POST /api/draws/fetch-auto - 手动触发自动抓取
 func FetchAutoDraws(c *gin.Context) {
 	SchedulerService.TriggerNow()

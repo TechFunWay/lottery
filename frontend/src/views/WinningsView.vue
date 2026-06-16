@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { winningApi } from '../api'
 import Pagination from '../components/Pagination.vue'
 import type { WinningRecord } from '../types'
-import { Trophy, Gift, TrendingUp } from 'lucide-vue-next'
+import { Trophy, Gift, TrendingUp, Edit2, RotateCcw, X } from 'lucide-vue-next'
 
 const winnings = ref<WinningRecord[]>([])
 const loading = ref(false)
@@ -114,7 +114,72 @@ const prizeColor = (level: number) => {
   return 'text-blue-600 bg-blue-50 border-blue-200'
 }
 
-const totalWinning = () => winnings.value.reduce((sum, w) => sum + w.prize_amount, 0)
+// 有效奖金：手动调整过则用手动值，否则用系统计算值
+const effAmount = (w: WinningRecord): number =>
+  w.manual_amount != null ? w.manual_amount : w.prize_amount
+
+const isAdjusted = (w: WinningRecord): boolean => w.manual_amount != null
+
+const totalWinning = () => winnings.value.reduce((sum, w) => sum + effAmount(w), 0)
+
+// ===== 金额编辑 =====
+const editModal = ref(false)
+const editingWin = ref<WinningRecord | null>(null)
+const editAmount = ref<number>(0)
+const saving = ref(false)
+
+const toast = ref({ show: false, type: 'info' as 'success' | 'error', message: '' })
+const showToast = (type: 'success' | 'error', message: string) => {
+  toast.value = { show: true, type, message }
+  setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+const openEdit = (win: WinningRecord) => {
+  editingWin.value = win
+  editAmount.value = effAmount(win)
+  editModal.value = true
+}
+
+const closeEdit = () => {
+  editModal.value = false
+  editingWin.value = null
+}
+
+const saveEdit = async () => {
+  if (!editingWin.value) return
+  if (editAmount.value < 0 || isNaN(editAmount.value)) {
+    showToast('error', '请输入有效金额')
+    return
+  }
+  saving.value = true
+  try {
+    await winningApi.update(editingWin.value.id, editAmount.value)
+    closeEdit()
+    await loadWinnings()
+    showToast('success', '金额已调整')
+  } catch (e) {
+    console.error('调整失败', e)
+    showToast('error', '调整失败，请重试')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 还原为系统计算金额
+const resetAmount = async (win: WinningRecord) => {
+  saving.value = true
+  try {
+    await winningApi.update(win.id, null)
+    if (editModal.value) closeEdit()
+    await loadWinnings()
+    showToast('success', '已还原为系统金额')
+  } catch (e) {
+    console.error('还原失败', e)
+    showToast('error', '还原失败，请重试')
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
@@ -177,7 +242,16 @@ const totalWinning = () => winnings.value.reduce((sum, w) => sum + w.prize_amoun
             </div>
           </div>
           <div class="text-right">
-            <div class="text-xl font-bold text-emerald-600">¥{{ win.prize_amount.toLocaleString() }}</div>
+            <div class="flex items-center justify-end gap-1.5">
+              <div class="text-xl font-bold text-emerald-600">¥{{ effAmount(win).toLocaleString() }}</div>
+              <button @click="openEdit(win)" class="p-1 text-slate-300 hover:text-blue-500 cursor-pointer" title="调整金额">
+                <Edit2 class="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div v-if="isAdjusted(win)" class="flex items-center justify-end gap-1 mt-0.5">
+              <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">已调整</span>
+              <span class="text-[10px] text-slate-400 line-through">¥{{ win.prize_amount.toLocaleString() }}</span>
+            </div>
           </div>
         </div>
 
@@ -230,5 +304,69 @@ const totalWinning = () => winnings.value.reduce((sum, w) => sum + w.prize_amoun
       v-model:page-size="pageSize"
       :total="total"
     />
+
+    <!-- 金额调整弹窗 -->
+    <div v-if="editModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeEdit"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-slide-up">
+        <div class="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-slate-800">调整中奖金额</h2>
+          <button @click="closeEdit" class="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-xs text-slate-400">
+            适用于活动翻倍等情况。系统计算金额为
+            <span class="font-medium text-slate-600">¥{{ editingWin?.prize_amount.toLocaleString() }}</span>，
+            调整后「重新检查中奖」不会覆盖。
+          </p>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">中奖金额 (元)</label>
+            <input
+              v-model.number="editAmount"
+              type="number"
+              step="0.01"
+              min="0"
+              class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400"
+            />
+          </div>
+        </div>
+        <div class="border-t border-slate-100 px-6 py-4 flex items-center gap-3">
+          <button
+            v-if="editingWin && isAdjusted(editingWin)"
+            @click="resetAmount(editingWin)"
+            :disabled="saving"
+            class="flex items-center gap-1.5 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <RotateCcw class="w-4 h-4" />
+            还原
+          </button>
+          <div class="flex-1"></div>
+          <button @click="closeEdit" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer">取消</button>
+          <button
+            @click="saveEdit"
+            :disabled="saving"
+            class="px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <Transition name="toast">
+      <div
+        v-if="toast.show"
+        class="fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl shadow-lg flex items-center gap-3"
+        :class="{
+          'bg-emerald-500 text-white': toast.type === 'success',
+          'bg-red-500 text-white': toast.type === 'error'
+        }"
+      >
+        <span class="font-medium">{{ toast.message }}</span>
+      </div>
+    </Transition>
   </div>
 </template>

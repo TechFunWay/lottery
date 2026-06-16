@@ -108,6 +108,9 @@ export const winningApi = {
   list: (params?: { lottery_type?: string; page?: number; size?: number }): Promise<ListResponse<WinningRecord>> =>
     api.get('/winnings', { params }),
   recheck: () => api.post('/winnings/recheck'),
+  // 手动调整中奖金额：传 number 设置，传 null 还原为系统计算值
+  update: (id: number, manual_amount: number | null) =>
+    api.put(`/winnings/${id}`, { manual_amount }),
 }
 
 // ===== 统计分析 API =====
