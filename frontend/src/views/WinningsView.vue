@@ -107,6 +107,41 @@ const isHit = (num: number, purchaseJson: string, drawJson: string, isBlue: bool
   return drawNums.includes(num)
 }
 
+// ===== 数字型彩票（福彩3D/排列3/排列5）展示 =====
+const digitTypes = ['福彩3D', '排列3', '排列5']
+const isDigitType = (type: string) => digitTypes.includes(type)
+
+const digitPosLabels = (count: number) =>
+  count === 5 ? ['万', '千', '百', '十', '个'] : ['百', '十', '个']
+
+const formatDigitBet = (json: string): string => {
+  const n = parseNumbers(json) as any
+  const play = n.play || n.bet_type || '直选'
+  if (Array.isArray(n.group) || play === '组选3' || play === '组选6') {
+    const g = (n.group || n.numbers || []) as number[]
+    return `${play}：${[...g].sort((a, b) => a - b).join(' ')}`
+  }
+  let pos: number[][] = []
+  if (Array.isArray(n.positions)) pos = n.positions
+  else if (Array.isArray(n.numbers)) pos = n.numbers.map((x: number) => [x])
+  else if (Array.isArray(n)) pos = (n as number[]).map((x: number) => [x])
+  const labels = digitPosLabels(pos.length)
+  if (play === '定位胆') {
+    const parts = pos
+      .map((p, i) => (p && p.length ? `${labels[i]}:${[...p].sort((a, b) => a - b).join(',')}` : null))
+      .filter(Boolean)
+    return `定位胆 ${parts.join('  ')}`
+  }
+  return `${play}：` + pos.map(p => (p && p.length ? [...p].sort((a, b) => a - b).join(',') : '-')).join(' | ')
+}
+
+const getDrawDigits = (json: string): number[] => {
+  const n = parseNumbers(json) as any
+  if (Array.isArray(n)) return n
+  if (Array.isArray(n.numbers)) return n.numbers
+  return []
+}
+
 const prizeColor = (level: number) => {
   if (level === 1) return 'text-amber-600 bg-amber-50 border-amber-200'
   if (level === 2) return 'text-slate-600 bg-slate-50 border-slate-200'
@@ -260,7 +295,12 @@ const resetAmount = async (win: WinningRecord) => {
             <span class="text-slate-400">期号</span>
             <span class="text-slate-600 font-medium">{{ win.issue_number }}</span>
           </div>
-          <div class="flex items-center justify-between text-sm">
+          <!-- 数字型彩票 -->
+          <div v-if="isDigitType(win.lottery_type)" class="flex items-start justify-between text-sm gap-2">
+            <span class="text-slate-400 shrink-0">投注号码</span>
+            <span class="text-slate-700 font-mono text-right break-all">{{ formatDigitBet(win.purchase?.numbers || '{}') }}</span>
+          </div>
+          <div class="flex items-center justify-between text-sm" v-if="!isDigitType(win.lottery_type)">
             <span class="text-slate-400 shrink-0">投注号码</span>
             <div class="flex flex-wrap items-center gap-1">
               <span v-if="hasRed(win.purchase?.numbers || '{}')" v-for="(ball, idx) in getRedBalls(win.purchase?.numbers || '{}')" :key="'r'+idx"
