@@ -36,6 +36,20 @@ export interface PublicConfigs {
   allow_register: boolean
 }
 
+export type FootballKeySource = 'user' | 'admin' | 'env' | 'builtin' | 'none'
+
+export interface FootballConfigStatus {
+  configured: boolean
+  source: FootballKeySource
+  masked_key: string
+  registration_url?: string
+}
+
+export interface FootballTestResult {
+  success: boolean
+  message: string
+}
+
 // 彩票类型
 export type LotteryType = '双色球' | '大乐透' | '福彩3D' | '排列3' | '排列5' | '七乐彩' | '七星彩'
 

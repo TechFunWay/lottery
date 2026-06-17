@@ -175,6 +175,25 @@ export const configApi = {
     api.put('/configs', configs),
 }
 
+// ===== 竞彩足球数据源 API =====
+export const footballConfigApi = {
+  // 公开状态(system-level)
+  getSystemStatus: (): Promise<{ data: FootballConfigStatus }> =>
+    api.get('/football/config/status'),
+  // 当前用户的有效 key 状态
+  getMyStatus: (): Promise<{ data: FootballConfigStatus }> =>
+    api.get('/football/config/me'),
+  // 设置/清除当前用户的 key(空 = 清除)
+  setMyKey: (key: string): Promise<{ message: string }> =>
+    api.put('/football/config/me', { key }),
+  // 管理员设置全局 key
+  setGlobalKey: (key: string): Promise<{ message: string }> =>
+    api.put('/football/config/global', { key }),
+  // 测试 key(body.key 留空则用当前用户有效 key)
+  testKey: (key: string): Promise<{ data: FootballTestResult }> =>
+    api.post('/football/config/test', { key }),
+}
+
 // ===== 系统信息 API =====
 export interface VersionInfo {
   name: string

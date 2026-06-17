@@ -5,6 +5,7 @@ import (
 	"lottery-backend/services"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -173,6 +174,19 @@ func FetchFootballMatches(c *gin.Context) {
 		return
 	}
 
+	if len(matches) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "当前数据源暂无可用赛程数据,请手动录入或稍后重试",
+			"data": gin.H{
+				"total":       0,
+				"saved_count": 0,
+				"exist_count": 0,
+				"empty":       true,
+			},
+		})
+		return
+	}
+
 	savedCount := 0
 	existCount := 0
 	for _, match := range matches {
@@ -186,17 +200,33 @@ func FetchFootballMatches(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "赛程抓取完成",
 		"data": gin.H{
-			"total":        len(matches),
-			"saved_count":  savedCount,
-			"exist_count":  existCount,
+			"total":       len(matches),
+			"saved_count": savedCount,
+			"exist_count": existCount,
+			"empty":       false,
 		},
 	})
 }
 
 func FetchFootballResults(c *gin.Context) {
-	matches, err := footballService.FetchMatchResults()
+	userID, _ := c.Get("user_id")
+	uid, _ := userID.(uint)
+
+	matches, err := footballService.FetchMatchResults(uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "抓取比赛结果失败: " + err.Error()})
+		return
+	}
+
+	if len(matches) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "当前数据源暂无可用比赛结果,请稍后重试",
+			"data": gin.H{
+				"total":         0,
+				"updated_count": 0,
+				"empty":         true,
+			},
+		})
 		return
 	}
 
@@ -226,6 +256,7 @@ func FetchFootballResults(c *gin.Context) {
 		"data": gin.H{
 			"total":         len(matches),
 			"updated_count": updatedCount,
+			"empty":         false,
 		},
 	})
 }
@@ -362,4 +393,93 @@ func GetFootballOverview(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": overview})
+}
+
+const apiFootballRegistrationURL = "https://dashboard.api-football.com/prod/register"
+
+func GetFootballConfigStatus(c *gin.Context) {
+	key, source := configService.ResolveAPIFootballKey(0)
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"configured":       key != "",
+			"source":           string(source),
+			"masked_key":       services.MaskAPIFootballKey(key),
+			"registration_url": apiFootballRegistrationURL,
+		},
+	})
+}
+
+func GetMyFootballConfig(c *gin.Context) {
+	uid, _ := c.Get("user_id")
+	key, source := configService.ResolveAPIFootballKey(uid.(uint))
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"configured": key != "",
+			"source":     string(source),
+			"masked_key": services.MaskAPIFootballKey(key),
+		},
+	})
+}
+
+type setFootballKeyRequest struct {
+	Key string `json:"key"`
+}
+
+func SetMyFootballConfig(c *gin.Context) {
+	uid, _ := c.Get("user_id")
+	var req setFootballKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := configService.SetAPIFootballKey(uid.(uint), req.Key); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败: " + err.Error()})
+		return
+	}
+	msg := "已保存个人 API-Football Key"
+	if strings.TrimSpace(req.Key) == "" {
+		msg = "已清除个人 API-Football Key,将降级使用管理员/环境变量配置"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": msg})
+}
+
+func SetGlobalFootballConfig(c *gin.Context) {
+	var req setFootballKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := configService.SetGlobalAPIFootballKey(req.Key); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败: " + err.Error()})
+		return
+	}
+	msg := "已保存全局 API-Football Key,所有未自配用户均可使用"
+	if strings.TrimSpace(req.Key) == "" {
+		msg = "已清除全局 API-Football Key,赛果抓取将仅对自配用户可用"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": msg})
+}
+
+func TestFootballKey(c *gin.Context) {
+	uid, _ := c.Get("user_id")
+	var req setFootballKeyRequest
+	_ = c.ShouldBindJSON(&req)
+
+	testKey := strings.TrimSpace(req.Key)
+	if testKey == "" {
+		k, _ := configService.ResolveAPIFootballKey(uid.(uint))
+		testKey = k
+	}
+
+	if err := services.TestAPIFootballKey(testKey); err != nil {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"success": false,
+			"message": err.Error(),
+		}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"success": true,
+		"message": "Key 有效,可正常抓取赛果",
+	}})
 }
