@@ -56,6 +56,20 @@ Individual steps can be run via `.skill/` scripts directly. Docker multi-arch bu
 - **Usage stats**: anonymous, posts to `http://techfunway.wycto.cn/api/apps.online/refresh`, disable via `DISABLE_STATS=true`.
 - **Full pack** (one-shot build all): `bash pack.sh`.
 - **No test framework** detected in the repo.
+- **API-Football Key 内置(发布时)** — 竞彩足球赛果抓取默认开箱即用,无需用户配置:
+  - 维护者在 `make release` 前注入 key,用户端零感知:
+    ```bash
+    API_FOOTBALL_KEY=你的key make release
+    # 或:
+    go build -ldflags "-X 'lottery-backend/services.BuiltInAPIFootballKey=你的key'" ...
+    ```
+  - 解析优先级(详见 `services/config_service.go:ResolveAPIFootballKey`):
+    1. 用户自配(`/settings` 设置,per-user,SystemConfig 表)
+    2. 管理员全局(`/admin` 设置,SystemConfig 表)
+    3. 环境变量 `API_FOOTBALL_KEY`(开发者本地覆盖)
+    4. **内置 Key**(发布时注入,NAS 用户默认走这个)
+    5. 未配置(降级为空,banner 提示用户去 `/settings` 自配)
+  - 单用户 NAS 场景下,维护者注入一个 key 即可让所有用户开箱即用;如某用户希望用自己的 key(避免共享限流),可在 `/settings` 覆盖。
 
 ## Style / Conventions
 
