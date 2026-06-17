@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.1.2
+version               = 1.2.0
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
 platform              = x86
@@ -11,6 +11,17 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
 changelog             = """
+v1.2.0 更新内容
+   新功能
+   - 竞彩足球：数据源切换为 sporttery 官方(赛程+5 大玩法赔率)+ api-football(赛果)
+   - 竞彩足球：内置 130+ 条中英队名映射，自动回填比分到已抓取的中文赛程
+   - API-Football Key 自服务配置：用户可在「数据源设置」(/settings) 自配 key
+   - API-Football Key 全局配置：管理员可在「后台管理」(/admin) 配置全局 key
+   - API-Football Key 内置发布：维护者 `API_FOOTBALL_KEY=xxx make release` 注入,NAS 用户零配置开箱即用
+   Bug 修复
+   - 修复:第三方 huiniao.top 接口失效导致「抓取赛程」/「获取结果」全部失败
+   - 修复:空数据源时红色错误提示改为蓝色 info 提示 + 引导用户去设置
+
 v1.1.2 更新内容
    改进
    - 定时抓取：启动后立即执行一次，不再等待至凌晨 2 点
