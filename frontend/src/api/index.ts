@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview } from '../types'
+import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview, FootballConfigStatus, FootballTestResult } from '../types'
 
 // API 基础路径配置
 // 开发环境: http://localhost:8902/api
