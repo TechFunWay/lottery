@@ -241,6 +241,7 @@ func main() {
 
 		// 公开配置（不需要登录）
 		api.GET("/configs/public", handlers.GetPublicConfigs)
+		api.GET("/football/config/status", handlers.GetFootballConfigStatus)
 
 		// 需要认证的路由
 		authorized := api.Group("")
@@ -309,6 +310,16 @@ func main() {
 				football.DELETE("/bets/:id", handlers.DeleteFootballBet)
 				football.POST("/bets/recheck", handlers.RecheckFootballBets)
 				football.GET("/overview", handlers.GetFootballOverview)
+
+				football.GET("/config/me", handlers.GetMyFootballConfig)
+				football.PUT("/config/me", handlers.SetMyFootballConfig)
+				football.POST("/config/test", handlers.TestFootballKey)
+
+				footballAdmin := football.Group("")
+				footballAdmin.Use(middleware.AdminMiddleware())
+				{
+					footballAdmin.PUT("/config/global", handlers.SetGlobalFootballConfig)
+				}
 			}
 		}
 	}
