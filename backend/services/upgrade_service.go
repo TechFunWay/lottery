@@ -119,7 +119,7 @@ func (s *UpgradeService) RunUpgrades() error {
 
 	if len(versionsToRun) == 0 {
 		logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("✅ 当前已是最新版本: %s", currentVersion))
-		logger.GetSugarLogger().Info("✅ 当前已是最新版本: %s", currentVersion)
+		logger.GetSugarLogger().Infof("✅ 当前已是最新版本: %s", currentVersion)
 		return nil
 	}
 
@@ -131,7 +131,7 @@ func (s *UpgradeService) RunUpgrades() error {
 	for _, version := range versionsToRun {
 		script := migrations.UpgradeScripts[version]
 		logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("🔨 开始升级到 %s: %s", version, script.Name))
-		logger.GetSugarLogger().Info("🔨 正在升级到 %s: %s", version, script.Name)
+		logger.GetSugarLogger().Infof("🔨 正在升级到 %s: %s", version, script.Name)
 
 		// 检查是否已执行过
 		var existing models.SystemUpgrade
