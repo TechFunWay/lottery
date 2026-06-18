@@ -71,6 +71,8 @@ backend/index.html
 backend/lottery-web
 techfunway-lottery/app/server/lottery
 techfunway-lottery/app/www
+techfunway-lottery/techfunway-lottery.fpk
+*.fpk
 lottery-web
 index.html
 lottery
