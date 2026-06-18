@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"lottery-backend/logger"
 	"lottery-backend/models"
 	"lottery-backend/services"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -145,7 +145,7 @@ func FetchBatchDraws(c *gin.Context) {
 			if strings.Contains(err.Error(), "已存在") {
 				existCount++
 			} else {
-				log.Printf("保存开奖结果失败: %v", err)
+				logger.GetSugarLogger().Errorf("保存开奖结果失败: %v", err)
 			}
 			continue
 		}
