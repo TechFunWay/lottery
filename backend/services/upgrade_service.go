@@ -117,10 +117,9 @@ func (s *UpgradeService) RunUpgrades() error {
 		return CompareVersions(versionsToRun[i], versionsToRun[j]) < 0
 	})
 
-	// 如果没有需要升级的版本，直接返回
 	if len(versionsToRun) == 0 {
 		logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("✅ 当前已是最新版本: %s", currentVersion))
-		fmt.Printf("✅ 当前已是最新版本: %s\n", currentVersion)
+		logger.GetSugarLogger().Info("✅ 当前已是最新版本: %s", currentVersion)
 		return nil
 	}
 
@@ -129,11 +128,10 @@ func (s *UpgradeService) RunUpgrades() error {
 		logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("  - %s", v))
 	}
 
-	// 执行升级
 	for _, version := range versionsToRun {
 		script := migrations.UpgradeScripts[version]
 		logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("🔨 开始升级到 %s: %s", version, script.Name))
-		fmt.Printf("🔨 正在升级到 %s: %s\n", version, script.Name)
+		logger.GetSugarLogger().Info("🔨 正在升级到 %s: %s", version, script.Name)
 
 		// 检查是否已执行过
 		var existing models.SystemUpgrade
@@ -142,7 +140,7 @@ func (s *UpgradeService) RunUpgrades() error {
 			// 如果已执行且成功，跳过
 			if existing.Status == 1 {
 				logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("⏭️  %s 已执行，跳过", version))
-				fmt.Printf("⏭️  %s 已执行，跳过\n", version)
+				logger.GetSugarLogger().Infof("⏭️  %s 已执行，跳过", version)
 				continue
 			}
 			// 如果之前失败，更新记录重新执行
@@ -181,11 +179,11 @@ func (s *UpgradeService) RunUpgrades() error {
 		s.db.Save(&upgrade)
 
 		logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("✅ 升级 %s 成功，耗时: %v", version, duration))
-		fmt.Printf("✅ 升级 %s 成功\n", version)
+		logger.GetSugarLogger().Infof("✅ 升级 %s 成功", version)
 	}
 
 	logger.WriteUpgradeLog(s.dataDir, fmt.Sprintf("🎉 所有升级完成，当前版本: %s", versionsToRun[len(versionsToRun)-1]))
-	fmt.Printf("🎉 所有升级完成，当前版本: %s\n", versionsToRun[len(versionsToRun)-1])
+	logger.GetSugarLogger().Infof("🎉 所有升级完成，当前版本: %s", versionsToRun[len(versionsToRun)-1])
 
 	logger.WriteUpgradeLog(s.dataDir, "========================================")
 	logger.WriteUpgradeLog(s.dataDir, "升级检查结束")

@@ -2,11 +2,11 @@ package services
 
 import (
 	"lottery-backend/database"
+	"lottery-backend/logger"
 	"lottery-backend/middleware"
 	"lottery-backend/models"
 	"lottery-backend/utils"
 	"errors"
-	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -187,27 +187,23 @@ func (s *AuthService) ResetAdminPassword(password string) (string, error) {
 
 // UpdateUserPassword 重置用户密码（仅管理员）
 func (s *AuthService) UpdateUserPassword(userID uint, password string) error {
-	fmt.Printf("[DEBUG] UpdateUserPassword: userID=%d, receivedPassword=%s\n", userID, password)
+	logger.GetSugarLogger().Debugf("UpdateUserPassword: userID=%d", userID)
 
-	// 检查目标用户是否存在
 	var targetUser models.User
 	if err := s.GetDB().First(&targetUser, userID).Error; err != nil {
-		fmt.Printf("[DEBUG] User not found: %v\n", err)
+		logger.GetSugarLogger().Debugf("User not found: %v", err)
 		return err
 	}
 
-	// 不能重置管理员密码
 	if targetUser.Role == "admin" {
-		fmt.Println("[DEBUG] Cannot reset admin password")
+		logger.GetSugarLogger().Debug("Cannot reset admin password")
 		return errors.New("不能重置管理员密码")
 	}
 
-	// 对前端传来的 MD5 值再做一次加盐 MD5
 	hashedPassword := utils.HashPassword(password)
-	fmt.Printf("[DEBUG] Hashed password to save: %s\n", hashedPassword)
 
 	result := s.GetDB().Model(&models.User{}).Where("id = ?", userID).Update("password", hashedPassword)
-	fmt.Printf("[DEBUG] Update result: rowsAffected=%d, error=%v\n", result.RowsAffected, result.Error)
+	logger.GetSugarLogger().Debugf("Update result: rowsAffected=%d, error=%v", result.RowsAffected, result.Error)
 	return result.Error
 }
 
