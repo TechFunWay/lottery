@@ -5,6 +5,7 @@ import (
 	"lottery-backend/logger"
 	"lottery-backend/models"
 	"lottery-backend/rules"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,9 +69,13 @@ func (s *FootballService) GetFinishedMatches() ([]models.FootballMatch, error) {
 	return matches, err
 }
 
-// httpGetJSON 走 GET,自动设置 iPhone UA 以绕开阿里云 WAF,解析 JSON 到 v。
-func httpGetJSON(url string, headers map[string]string, timeout time.Duration, v interface{}) error {
+func httpGetJSON(url string, headers map[string]string, timeout time.Duration, v interface{}, insecure bool) error {
 	client := &http.Client{Timeout: timeout}
+	if insecure {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("构造请求失败: %w", err)
@@ -177,7 +182,7 @@ func (s *FootballService) FetchMatches() ([]*models.FootballMatch, error) {
 	}
 
 	var resp sportteryScheduleResp
-	if err := httpGetJSON(sportteryScheduleURL, headers, 12*time.Second, &resp); err != nil {
+	if err := httpGetJSON(sportteryScheduleURL, headers, 12*time.Second, &resp, true); err != nil {
 		return nil, fmt.Errorf("竞彩足球赛程接口不可达: %w", err)
 	}
 
@@ -243,7 +248,7 @@ func (s *FootballService) FetchMatchResults(userID uint) ([]*models.FootballMatc
 	}
 
 	var resp apiFootballFixturesResp
-	if err := httpGetJSON(url, headers, 12*time.Second, &resp); err != nil {
+	if err := httpGetJSON(url, headers, 12*time.Second, &resp, false); err != nil {
 		return nil, fmt.Errorf("api-football 赛果接口不可达: %w", err)
 	}
 

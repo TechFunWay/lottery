@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.2.0
+version               = 1.2.1
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
 platform              = x86
@@ -11,6 +11,10 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
 changelog             = """
+v1.2.1 更新内容
+   Bug 修复
+   - 修复:Docker 镜像(基于 scratch)抓取赛程失败 — sporttery 中间 CA(GeoTrust G2 TLS CN RSA4096 SHA256 2022 CA1)未在 Go 内嵌 CA 池中,导致 x509 证书验证失败。改为对 sporttery 端点跳过 TLS 校验(中国体彩官方端点,公开赛程数据无鉴权,风险可接受)
+
 v1.2.0 更新内容
    新功能
    - 竞彩足球：数据源切换为 sporttery 官方(赛程+5 大玩法赔率)+ api-football(赛果)
