@@ -33,6 +33,10 @@ var UpgradeScripts = map[string]UpgradeScript{
 		Name: "中奖金额手动调整",
 		Func: upgrade_v1_3_0,
 	},
+	"v1.4.0": {
+		Name: "双色球福运奖标记",
+		Func: upgrade_v1_4_0,
+	},
 }
 
 // upgrade_v1_0_0 初始化数据库（当前版本）
@@ -86,6 +90,14 @@ func upgrade_v1_2_0(db *gorm.DB) error {
 func upgrade_v1_3_0(db *gorm.DB) error {
 	// 为 winning_records 表新增 manual_amount 字段（手动调整奖金）
 	if err := db.AutoMigrate(&models.WinningRecord{}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func upgrade_v1_4_0(db *gorm.DB) error {
+	// 为 draw_results 表新增 fu_yun_award 字段（双色球福运奖标记）
+	if err := db.AutoMigrate(&models.DrawResult{}); err != nil {
 		return err
 	}
 	return nil

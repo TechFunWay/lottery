@@ -82,6 +82,7 @@ export interface DrawResult {
   draw_date: string
   numbers: string
   source: 'manual' | 'auto'
+  fu_yun_award?: boolean
   created_at: string
 }
 

@@ -21,6 +21,7 @@ type CreateDrawRequest struct {
 	IssueNumber string `json:"issue_number" binding:"required"`
 	DrawDate    string `json:"draw_date" binding:"required"`
 	Numbers     string `json:"numbers" binding:"required"`
+	FuYunAward  bool   `json:"fu_yun_award"` // 双色球福运奖（奖池≥15亿派奖期，中3红奖5元）
 }
 
 // CreateDraw POST /api/draws
@@ -43,6 +44,7 @@ func CreateDraw(c *gin.Context) {
 		DrawDate:    drawDate,
 		Numbers:     req.Numbers,
 		Source:      "manual",
+		FuYunAward:  req.FuYunAward,
 	}
 
 	if err := drawService.CreateDrawResult(draw); err != nil {
@@ -196,6 +198,7 @@ func UpdateDraw(c *gin.Context) {
 	draw.IssueNumber = req.IssueNumber
 	draw.DrawDate = drawDate
 	draw.Numbers = req.Numbers
+	draw.FuYunAward = req.FuYunAward
 
 	if err := drawService.UpdateDrawResult(&draw); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败: " + err.Error()})
