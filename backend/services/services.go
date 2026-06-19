@@ -650,7 +650,7 @@ func (s *WinningService) CalculateWinning(purchase *models.PurchaseRecord, draw 
 
 	switch purchase.LotteryType {
 	case models.ShuangSeQiu:
-		level, name, amount = rules.CalculateShuangSeQiu(purchase.Numbers, draw.Numbers, purchase.Multiple)
+		level, name, amount = rules.CalculateShuangSeQiu(purchase.Numbers, draw.Numbers, purchase.Multiple, draw.FuYunAward)
 	case models.DaLeTou:
 		level, name, amount = rules.CalculateDaLeTou(purchase.Numbers, draw.Numbers, purchase.Multiple, purchase.Append)
 	case models.FuCai3D:

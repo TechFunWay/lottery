@@ -43,7 +43,8 @@ const form = ref({
   lottery_type: '双色球' as LotteryType,
   issue_number: '',
   draw_date: new Date().toISOString().split('T')[0],
-  numbers: ''
+  numbers: '',
+  fu_yun_award: false
 })
 
 // 表单校验错误
@@ -95,7 +96,8 @@ const openModal = (item?: DrawResult) => {
       lottery_type: item.lottery_type,
       issue_number: item.issue_number,
       draw_date: item.draw_date.split('T')[0],
-      numbers: item.numbers
+      numbers: item.numbers,
+      fu_yun_award: item.fu_yun_award ?? false
     }
   } else {
     editingId.value = null
@@ -103,7 +105,8 @@ const openModal = (item?: DrawResult) => {
       lottery_type: '双色球',
       issue_number: '',
       draw_date: new Date().toISOString().split('T')[0],
-      numbers: ''
+      numbers: '',
+      fu_yun_award: false
     }
   }
   showModal.value = true
@@ -128,7 +131,9 @@ const saveDraw = async () => {
     lottery_type: form.value.lottery_type,
     issue_number: form.value.issue_number,
     draw_date: form.value.draw_date,
-    numbers: form.value.numbers
+    numbers: form.value.numbers,
+    // 福运奖仅双色球适用
+    fu_yun_award: form.value.lottery_type === '双色球' ? form.value.fu_yun_award : false
   }
   try {
     if (editingId.value) {
@@ -336,6 +341,9 @@ const fetchBatchDraws = async () => {
                 <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="sourceColor(item.source)">
                   {{ item.source === 'auto' ? '自动' : '手动' }}
                 </span>
+                <span v-if="item.fu_yun_award" class="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-600">
+                  福运奖
+                </span>
               </div>
               <div class="flex items-center gap-1 shrink-0 ml-2">
                 <button @click="openModal(item)" class="p-1.5 text-slate-400 hover:text-blue-500 cursor-pointer">
@@ -394,9 +402,14 @@ const fetchBatchDraws = async () => {
                   </div>
                 </td>
                 <td class="px-4 py-3">
-                  <span class="px-2 py-1 rounded-full text-xs font-medium" :class="sourceColor(item.source)">
-                    {{ item.source === 'auto' ? '自动抓取' : '手动录入' }}
-                  </span>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="px-2 py-1 rounded-full text-xs font-medium" :class="sourceColor(item.source)">
+                      {{ item.source === 'auto' ? '自动抓取' : '手动录入' }}
+                    </span>
+                    <span v-if="item.fu_yun_award" class="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-600">
+                      福运奖
+                    </span>
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-sm text-slate-500">{{ item.draw_date.split('T')[0] }}</td>
                 <td class="px-4 py-3 text-right">
@@ -470,6 +483,21 @@ const fetchBatchDraws = async () => {
             <p v-if="errors.numbers" class="mt-1 text-xs text-red-500 flex items-center gap-1">
               <span>⚠</span> {{ errors.numbers }}
             </p>
+          </div>
+
+          <!-- 双色球福运奖标记 -->
+          <div v-if="form.lottery_type === '双色球'" class="rounded-xl bg-amber-50 border border-amber-100 p-3">
+            <label class="flex items-start gap-2.5 cursor-pointer">
+              <input
+                v-model="form.fu_yun_award"
+                type="checkbox"
+                class="mt-0.5 w-4 h-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+              />
+              <span class="text-sm text-slate-700">
+                本期触发福运奖（奖池≥15亿派奖）
+                <span class="block text-xs text-slate-400 mt-0.5">勾选后，中3个红球（蓝球未中）将判中福运奖 5 元</span>
+              </span>
+            </label>
           </div>
 
           <div v-if="fetchableTypes.includes(form.lottery_type)" class="pt-2">

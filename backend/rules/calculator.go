@@ -31,6 +31,23 @@ var shuangSeQiuPrizes = map[string]ShuangSeQiuResult{
 	"0+1": {6, "六等奖", 5},
 }
 
+// 福运奖：奖池≥15亿派奖活动期间，中3个红球（蓝球未中）奖5元。
+// 由于系统无法自动获知奖池金额，是否启用按开奖期手动标记。
+var fuYunAward = ShuangSeQiuResult{7, "福运奖", 5}
+
+// ssqPrizeTable 返回当期适用的奖级表。fuYun=true 时附加福运奖（3+0）。
+func ssqPrizeTable(fuYun bool) map[string]ShuangSeQiuResult {
+	if !fuYun {
+		return shuangSeQiuPrizes
+	}
+	table := make(map[string]ShuangSeQiuResult, len(shuangSeQiuPrizes)+1)
+	for k, v := range shuangSeQiuPrizes {
+		table[k] = v
+	}
+	table["3+0"] = fuYunAward
+	return table
+}
+
 // combinations 生成从 n 个元素中选 k 个的所有组合
 func combinations(arr []int, k int) [][]int {
 	var result [][]int
@@ -54,7 +71,8 @@ func combinations(arr []int, k int) [][]int {
 }
 
 // CalculateShuangSeQiu 计算双色球中奖（支持复式）
-func CalculateShuangSeQiu(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
+// fuYun 为 true 表示该期处于奖池≥15亿派奖活动，中3红（蓝球未中）额外中福运奖5元。
+func CalculateShuangSeQiu(purchaseJSON, drawJSON string, multiple int, fuYun bool) (level int, name string, amount float64) {
 	var purchase, draw ShuangSeQiuNumbers
 	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
 		return 0, "未中奖", 0
@@ -62,6 +80,8 @@ func CalculateShuangSeQiu(purchaseJSON, drawJSON string, multiple int) (level in
 	if err := json.Unmarshal([]byte(drawJSON), &draw); err != nil {
 		return 0, "未中奖", 0
 	}
+
+	prizes := ssqPrizeTable(fuYun)
 
 	// 单式投注：红球6个，蓝球1个
 	isMultiple := len(purchase.Red) > 6 || len(purchase.Blue) > 1
@@ -74,7 +94,7 @@ func CalculateShuangSeQiu(purchaseJSON, drawJSON string, multiple int) (level in
 			blueMatch = 1
 		}
 		key := formatKey(redMatch, blueMatch)
-		if result, ok := shuangSeQiuPrizes[key]; ok {
+		if result, ok := prizes[key]; ok {
 			return result.Level, result.Name, result.Amount * float64(multiple)
 		}
 		return 0, "未中奖", 0
@@ -106,7 +126,7 @@ func CalculateShuangSeQiu(purchaseJSON, drawJSON string, multiple int) (level in
 				blueMatch = 1
 			}
 			key := formatKey(redMatch, blueMatch)
-			if result, ok := shuangSeQiuPrizes[key]; ok {
+			if result, ok := prizes[key]; ok {
 				totalAmount += result.Amount * float64(multiple)
 				if bestLevel == 0 || result.Level < bestLevel {
 					bestLevel = result.Level
