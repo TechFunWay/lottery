@@ -312,3 +312,25 @@ func AnalyzeDraws(lt models.LotteryType, draws []models.DrawResult) (*AnalysisRe
 
 	return result, nil
 }
+
+// AnalysisService 号码分析服务
+type AnalysisService struct{}
+
+// GetAnalysis 取该彩种最近 count 期（count<=0 表示全部），返回分析结果
+func (s *AnalysisService) GetAnalysis(lotteryType string, count int) (*AnalysisResult, error) {
+	lt := models.LotteryType(lotteryType)
+	if _, ok := lotteryConfigs[lt]; !ok {
+		return nil, fmt.Errorf("不支持的彩种: %s", lotteryType)
+	}
+	q := GetDB().Model(&models.DrawResult{}).
+		Where("lottery_type = ?", lotteryType).
+		Order("draw_date DESC")
+	if count > 0 {
+		q = q.Limit(count)
+	}
+	var draws []models.DrawResult
+	if err := q.Find(&draws).Error; err != nil {
+		return nil, err
+	}
+	return AnalyzeDraws(lt, draws)
+}

@@ -14,6 +14,7 @@ import (
 )
 
 var drawService = &services.DrawService{}
+var analysisService = &services.AnalysisService{}
 var SchedulerService *services.SchedulerService
 
 type CreateDrawRequest struct {
@@ -313,4 +314,23 @@ func UpdateWinning(c *gin.Context) {
 func FetchAutoDraws(c *gin.Context) {
 	SchedulerService.TriggerNow()
 	c.JSON(http.StatusOK, gin.H{"message": "已触发自动抓取任务，请稍后查看结果"})
+}
+
+// GetDrawAnalysis GET /api/draws/analysis - 开奖号码分析
+func GetDrawAnalysis(c *gin.Context) {
+	lotteryType := c.Query("lottery_type")
+	if lotteryType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定彩票类型"})
+		return
+	}
+	count, _ := strconv.Atoi(c.DefaultQuery("count", "50"))
+	if count < 0 {
+		count = 0
+	}
+	result, err := analysisService.GetAnalysis(lotteryType, count)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
