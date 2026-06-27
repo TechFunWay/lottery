@@ -155,3 +155,56 @@ var lotteryConfigs = map[models.LotteryType]lotteryConfig{
 		mainField: "numbers", bigSmall: false,
 	},
 }
+
+// computeFrequency 统计 [min,max] 内每个号码在 perIssue 中出现的次数
+func computeFrequency(min, max int, perIssue [][]int) []FreqItem {
+	counts := make(map[int]int)
+	for _, vals := range perIssue {
+		for _, v := range vals {
+			counts[v]++
+		}
+	}
+	out := make([]FreqItem, 0, max-min+1)
+	for n := min; n <= max; n++ {
+		out = append(out, FreqItem{Num: n, Count: counts[n]})
+	}
+	return out
+}
+
+// computeOmission 计算每个号码的当前遗漏与历史最大遗漏。perIssue 须时间升序。
+func computeOmission(min, max int, perIssue [][]int) []OmissionItem {
+	total := len(perIssue)
+	out := make([]OmissionItem, 0, max-min+1)
+	for n := min; n <= max; n++ {
+		lastSeen := -1
+		maxGap := 0
+		gap := 0
+		for i := 0; i < total; i++ {
+			present := false
+			for _, v := range perIssue[i] {
+				if v == n {
+					present = true
+					break
+				}
+			}
+			if present {
+				if gap > maxGap {
+					maxGap = gap
+				}
+				gap = 0
+				lastSeen = i
+			} else {
+				gap++
+			}
+		}
+		if gap > maxGap { // 末尾连续遗漏
+			maxGap = gap
+		}
+		current := total
+		if lastSeen >= 0 {
+			current = total - 1 - lastSeen
+		}
+		out = append(out, OmissionItem{Num: n, Current: current, Max: maxGap})
+	}
+	return out
+}

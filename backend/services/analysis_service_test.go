@@ -50,3 +50,47 @@ func TestLotteryConfigsCoverAllTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeFrequency(t *testing.T) {
+	// 3 期，单位号码区 0-9
+	per := [][]int{{1}, {2}, {1}}
+	freq := computeFrequency(0, 9, per)
+	if len(freq) != 10 {
+		t.Fatalf("expected 10 items, got %d", len(freq))
+	}
+	if freq[0].Num != 0 || freq[0].Count != 0 {
+		t.Errorf("num 0 = %+v", freq[0])
+	}
+	if freq[1].Num != 1 || freq[1].Count != 2 {
+		t.Errorf("num 1 = %+v", freq[1])
+	}
+	if freq[2].Count != 1 {
+		t.Errorf("num 2 count = %d", freq[2].Count)
+	}
+}
+
+func TestComputeOmission(t *testing.T) {
+	per := [][]int{{1}, {2}, {1}} // 时间升序
+	om := computeOmission(0, 9, per)
+	get := func(n int) OmissionItem {
+		for _, o := range om {
+			if o.Num == n {
+				return o
+			}
+		}
+		t.Fatalf("num %d not found", n)
+		return OmissionItem{}
+	}
+	// 1：最近一期(末期)开出 → 当前遗漏 0；最大遗漏 1（中间漏 1 期）
+	if o := get(1); o.Current != 0 || o.Max != 1 {
+		t.Errorf("num 1 = %+v", o)
+	}
+	// 2：第 2 期开出，之后漏 1 期 → 当前遗漏 1；最大遗漏 1
+	if o := get(2); o.Current != 1 || o.Max != 1 {
+		t.Errorf("num 2 = %+v", o)
+	}
+	// 0：从未开出 → 当前遗漏 3；最大遗漏 3
+	if o := get(0); o.Current != 3 || o.Max != 3 {
+		t.Errorf("num 0 = %+v", o)
+	}
+}
