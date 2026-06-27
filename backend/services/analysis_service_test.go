@@ -122,3 +122,76 @@ func TestComputeMetricsNoBigSmall(t *testing.T) {
 		t.Errorf("expected empty bigSmall, got %q", m[0].BigSmall)
 	}
 }
+
+func mkDraw(lt models.LotteryType, issue, numbers string) models.DrawResult {
+	return models.DrawResult{LotteryType: lt, IssueNumber: issue, Numbers: numbers}
+}
+
+func TestAnalyzeDrawsSSQ(t *testing.T) {
+	draws := []models.DrawResult{
+		// 故意乱序，验证内部按期号升序
+		mkDraw(models.ShuangSeQiu, "2026002", `{"red":[1,2,3,4,5,7],"blue":[9]}`),
+		mkDraw(models.ShuangSeQiu, "2026001", `{"red":[1,2,3,4,5,6],"blue":[8]}`),
+	}
+	res, err := AnalyzeDraws(models.ShuangSeQiu, draws)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.IssueCount != 2 {
+		t.Fatalf("issueCount = %d", res.IssueCount)
+	}
+	if res.Issues[0] != "2026001" || res.Issues[1] != "2026002" {
+		t.Errorf("issues not ascending: %v", res.Issues)
+	}
+	if len(res.Zones) != 2 || res.Zones[0].Name != "红球" || res.Zones[1].Name != "蓝球" {
+		t.Fatalf("zones = %+v", res.Zones)
+	}
+	// 红球 1 出现 2 次
+	if res.Zones[0].Frequency[0].Num != 1 || res.Zones[0].Frequency[0].Count != 2 {
+		t.Errorf("red 1 freq = %+v", res.Zones[0].Frequency[0])
+	}
+	// 走势与期号对齐：首期红球含 6
+	if len(res.Zones[0].Trend) != 2 || res.Zones[0].Trend[0][5] != 6 {
+		t.Errorf("trend = %v", res.Zones[0].Trend)
+	}
+	// metrics 首期和值 = 1+2+3+4+5+6 = 21
+	if len(res.Metrics) != 2 || res.Metrics[0].Sum != 21 {
+		t.Errorf("metrics = %+v", res.Metrics)
+	}
+}
+
+func TestAnalyzeDrawsEmpty(t *testing.T) {
+	res, err := AnalyzeDraws(models.DaLeTou, nil)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.IssueCount != 0 || len(res.Issues) != 0 {
+		t.Errorf("expected empty, got %+v", res)
+	}
+	if len(res.Zones) != 2 { // 前区 + 后区 仍按配置生成
+		t.Errorf("zones = %d", len(res.Zones))
+	}
+	if len(res.Metrics) != 0 {
+		t.Errorf("metrics should be empty, got %d", len(res.Metrics))
+	}
+}
+
+func TestAnalyzeDrawsSkipsBadJSON(t *testing.T) {
+	draws := []models.DrawResult{
+		mkDraw(models.PaiLie3, "2026001", `{"numbers":[1,2,3]}`),
+		mkDraw(models.PaiLie3, "2026002", `not-json`),
+	}
+	res, err := AnalyzeDraws(models.PaiLie3, draws)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.IssueCount != 1 || res.Issues[0] != "2026001" {
+		t.Errorf("expected 1 valid issue, got %+v", res.Issues)
+	}
+}
+
+func TestAnalyzeDrawsUnknownType(t *testing.T) {
+	if _, err := AnalyzeDraws(models.LotteryType("不存在"), nil); err == nil {
+		t.Fatal("expected error for unknown type")
+	}
+}

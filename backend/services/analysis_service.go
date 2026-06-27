@@ -1,7 +1,11 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
+
+	"lottery-backend/logger"
 	"lottery-backend/models"
 )
 
@@ -250,4 +254,61 @@ func computeMetrics(issues []string, mainPerIssue [][]int, bigSmall bool, thresh
 		out = append(out, item)
 	}
 	return out
+}
+
+// AnalyzeDraws 对给定彩种的开奖记录做号码分析。draws 顺序不限，内部按期号升序处理。
+func AnalyzeDraws(lt models.LotteryType, draws []models.DrawResult) (*AnalysisResult, error) {
+	cfg, ok := lotteryConfigs[lt]
+	if !ok {
+		return nil, fmt.Errorf("不支持的彩种: %s", lt)
+	}
+
+	sorted := make([]models.DrawResult, len(draws))
+	copy(sorted, draws)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].IssueNumber < sorted[j].IssueNumber
+	})
+
+	issues := make([]string, 0, len(sorted))
+	parsed := make([]rawNumbers, 0, len(sorted))
+	for _, d := range sorted {
+		var r rawNumbers
+		if err := json.Unmarshal([]byte(d.Numbers), &r); err != nil {
+			logger.GetSugarLogger().Warnf("号码分析跳过无法解析的开奖记录 id=%d issue=%s: %v", d.ID, d.IssueNumber, err)
+			continue
+		}
+		issues = append(issues, d.IssueNumber)
+		parsed = append(parsed, r)
+	}
+
+	result := &AnalysisResult{
+		LotteryType: string(lt),
+		IssueCount:  len(issues),
+		Issues:      issues,
+		Zones:       make([]ZoneResult, 0, len(cfg.zones)),
+		Metrics:     []MetricItem{},
+	}
+
+	for _, z := range cfg.zones {
+		perIssue := make([][]int, len(parsed))
+		for i, r := range parsed {
+			perIssue[i] = z.values(r)
+		}
+		result.Zones = append(result.Zones, ZoneResult{
+			Name:      z.name,
+			Min:       z.min,
+			Max:       z.max,
+			Frequency: computeFrequency(z.min, z.max, perIssue),
+			Omission:  computeOmission(z.min, z.max, perIssue),
+			Trend:     perIssue,
+		})
+	}
+
+	mainPerIssue := make([][]int, len(parsed))
+	for i, r := range parsed {
+		mainPerIssue[i] = r.field(cfg.mainField)
+	}
+	result.Metrics = computeMetrics(issues, mainPerIssue, cfg.bigSmall, cfg.bigSmallThreshold)
+
+	return result, nil
 }
