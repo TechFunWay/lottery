@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue'
 import { drawApi } from '../api'
 import { LOTTERY_CONFIGS } from '../types'
 import type { DrawAnalysis } from '../types'
+import FrequencyChart from '../components/analysis/FrequencyChart.vue'
+import OmissionChart from '../components/analysis/OmissionChart.vue'
 
 // 仅 7 种数字彩（LOTTERY_CONFIGS 前 7 项即彩票，足球玩法在其后）
 const lotteryTypes = LOTTERY_CONFIGS.map(c => c.type)
@@ -99,7 +101,13 @@ onMounted(load)
     <!-- 图表区（Task 8-10 填充） -->
     <template v-else>
       <div class="text-sm text-slate-500">共 {{ analysis.issue_count }} 期</div>
-      <!-- ANALYSIS_CHARTS_SLOT -->
+      <div v-for="zone in analysis.zones" :key="zone.name" class="space-y-3">
+        <h3 class="font-semibold text-slate-700">{{ zone.name }}</h3>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 overflow-x-auto">
+          <FrequencyChart :zone="zone" />
+          <OmissionChart :zone="zone" />
+        </div>
+      </div>
     </template>
   </div>
 </template>
