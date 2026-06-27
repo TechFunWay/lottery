@@ -94,3 +94,31 @@ func TestComputeOmission(t *testing.T) {
 		t.Errorf("num 0 = %+v", o)
 	}
 }
+
+func TestComputeMetrics(t *testing.T) {
+	issues := []string{"2026001"}
+	main := [][]int{{1, 2, 17, 33}} // 和=53 跨度=32 奇偶: 1,17,33奇=3, 2偶=1 → 3:1 大小(阈值16): 17,33>16=2, 1,2=2 → 2:2
+	m := computeMetrics(issues, main, true, 16)
+	if len(m) != 1 {
+		t.Fatalf("expected 1, got %d", len(m))
+	}
+	if m[0].Issue != "2026001" || m[0].Sum != 53 || m[0].Span != 32 {
+		t.Errorf("sum/span = %+v", m[0])
+	}
+	if m[0].OddEven != "3:1" {
+		t.Errorf("oddEven = %q", m[0].OddEven)
+	}
+	if m[0].BigSmall != "2:2" {
+		t.Errorf("bigSmall = %q", m[0].BigSmall)
+	}
+}
+
+func TestComputeMetricsNoBigSmall(t *testing.T) {
+	m := computeMetrics([]string{"x"}, [][]int{{3, 5, 9}}, false, 0)
+	if m[0].Sum != 17 || m[0].Span != 6 {
+		t.Errorf("sum/span = %+v", m[0])
+	}
+	if m[0].BigSmall != "" {
+		t.Errorf("expected empty bigSmall, got %q", m[0].BigSmall)
+	}
+}

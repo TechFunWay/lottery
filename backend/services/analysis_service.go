@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"lottery-backend/models"
 )
 
@@ -205,6 +206,48 @@ func computeOmission(min, max int, perIssue [][]int) []OmissionItem {
 			current = total - 1 - lastSeen
 		}
 		out = append(out, OmissionItem{Num: n, Current: current, Max: maxGap})
+	}
+	return out
+}
+
+// computeMetrics 按期计算主区的和值、跨度、奇偶比、大小比
+func computeMetrics(issues []string, mainPerIssue [][]int, bigSmall bool, threshold int) []MetricItem {
+	out := make([]MetricItem, 0, len(issues))
+	for i, nums := range mainPerIssue {
+		if i >= len(issues) {
+			break
+		}
+		sum, odd, even, big, small := 0, 0, 0, 0, 0
+		mn, mx := 0, 0
+		for j, v := range nums {
+			sum += v
+			if v%2 == 0 {
+				even++
+			} else {
+				odd++
+			}
+			if v > threshold {
+				big++
+			} else {
+				small++
+			}
+			if j == 0 || v < mn {
+				mn = v
+			}
+			if j == 0 || v > mx {
+				mx = v
+			}
+		}
+		item := MetricItem{
+			Issue:   issues[i],
+			Sum:     sum,
+			Span:    mx - mn,
+			OddEven: fmt.Sprintf("%d:%d", odd, even),
+		}
+		if bigSmall {
+			item.BigSmall = fmt.Sprintf("%d:%d", big, small)
+		}
+		out = append(out, item)
 	}
 	return out
 }
