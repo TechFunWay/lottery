@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound, Zap, ExternalLink, Heart } from 'lucide-vue-next'
+import { Home, ShoppingCart, Award, BarChart3, Gift, Menu, X, Target, Users, LogOut, User as UserIcon, Settings, KeyRound, Zap, ExternalLink, Heart, LineChart } from 'lucide-vue-next'
 import type { User, VersionInfo } from '../types'
 import { authApi, systemApi } from '../api'
 import SupportModal from './SupportModal.vue'
@@ -32,6 +32,7 @@ const navItems = [
   { name: '中奖记录', path: '/winnings', icon: Gift },
   { name: '历史命中', path: '/history-hit', icon: Target },
   { name: '统计分析', path: '/statistics', icon: BarChart3 },
+  { name: '号码分析', path: '/analysis', icon: LineChart },
   { name: '竞彩足球', path: '/football', icon: Zap },
 ]
 

@@ -313,3 +313,29 @@ export const WDL_LABELS: Record<string, string> = {
   '1': '平',
   '0': '客胜'
 }
+
+// ===== 开奖号码分析 =====
+export interface AnalysisFreqItem { num: number; count: number }
+export interface AnalysisOmissionItem { num: number; current: number; max: number }
+export interface AnalysisZone {
+  name: string
+  min: number
+  max: number
+  frequency: AnalysisFreqItem[]
+  omission: AnalysisOmissionItem[]
+  trend: number[][]
+}
+export interface AnalysisMetric {
+  issue: string
+  sum: number
+  span: number
+  oddEven: string
+  bigSmall: string
+}
+export interface DrawAnalysis {
+  lottery_type: string
+  issue_count: number
+  issues: string[]
+  zones: AnalysisZone[]
+  metrics: AnalysisMetric[]
+}
