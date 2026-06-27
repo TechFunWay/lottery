@@ -6,6 +6,7 @@ import type { DrawAnalysis } from '../types'
 import FrequencyChart from '../components/analysis/FrequencyChart.vue'
 import OmissionChart from '../components/analysis/OmissionChart.vue'
 import TrendChart from '../components/analysis/TrendChart.vue'
+import MetricsChart from '../components/analysis/MetricsChart.vue'
 
 // 仅 7 种数字彩（LOTTERY_CONFIGS 前 7 项即彩票，足球玩法在其后）
 const lotteryTypes = LOTTERY_CONFIGS.map(c => c.type)
@@ -109,6 +110,12 @@ onMounted(load)
           <OmissionChart :zone="zone" />
         </div>
         <TrendChart :zone="zone" :issues="analysis.issues" />
+      </div>
+      <div v-if="analysis.metrics.length" class="space-y-3">
+        <h3 class="font-semibold text-slate-700">和值 / 跨度</h3>
+        <div class="overflow-x-auto">
+          <MetricsChart :metrics="analysis.metrics" />
+        </div>
       </div>
     </template>
   </div>
