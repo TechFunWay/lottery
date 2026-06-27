@@ -23,7 +23,7 @@ const option = computed(() => {
     title: { text: `${props.zone.name} · 走势`, left: 'center', textStyle: { fontSize: 13 } },
     tooltip: {
       trigger: 'item',
-      formatter: (p: any) => `${props.issues[p.value[0]] ?? ''}<br/>号码 ${String(p.value[1]).padStart(2, '0')}`,
+      formatter: (p: any) => `${props.issues[p.value[0]] ?? ''}<br/>号码 ${String(p.value[1] + props.zone.min).padStart(2, '0')}`,
     },
     grid: { left: 36, right: 10, top: 40, bottom: 40 },
     xAxis: {
