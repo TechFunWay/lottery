@@ -8,7 +8,7 @@ import OmissionChart from '../components/analysis/OmissionChart.vue'
 import TrendChart from '../components/analysis/TrendChart.vue'
 import MetricsChart from '../components/analysis/MetricsChart.vue'
 
-// 仅 7 种数字彩（LOTTERY_CONFIGS 前 7 项即彩票，足球玩法在其后）
+// LOTTERY_CONFIGS 即 7 种数字彩（竞彩足球玩法在单独的 FOOTBALL 配置中）
 const lotteryTypes = LOTTERY_CONFIGS.map(c => c.type)
 
 const selectedType = ref<string>('双色球')
@@ -100,7 +100,7 @@ onMounted(load)
       抓取或录入。
     </div>
 
-    <!-- 图表区（Task 8-10 填充） -->
+    <!-- 图表区 -->
     <template v-else>
       <div class="text-sm text-slate-500">共 {{ analysis.issue_count }} 期</div>
       <div v-for="zone in analysis.zones" :key="zone.name" class="space-y-3">
