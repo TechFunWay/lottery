@@ -159,51 +159,51 @@ onUnmounted(() => {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <!-- Logo -->
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <Gift class="w-5 h-5 text-white" />
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <Gift class="w-4 h-4 text-white" />
           </div>
           <div class="flex flex-col">
-            <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
+            <span class="text-lg font-bold bg-gradient-to-r from-blue-600 to-emerald-500 bg-clip-text text-transparent">
               彩彩助手
             </span>
-            <span class="text-xs text-slate-500" v-if="versionInfo">
+            <span class="text-[10px] text-slate-500 -mt-0.5" v-if="versionInfo">
               {{ versionInfo.version }}
             </span>
           </div>
         </div>
 
         <!-- Desktop Navigation -->
-        <div class="hidden md:flex items-center gap-1">
+        <div class="hidden md:flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
           <router-link
             v-for="item in navItems"
             :key="item.path"
             :to="item.path"
-            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
             :class="isActive(item.path)
               ? 'bg-blue-50 text-blue-600 shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'"
           >
-            <component :is="item.icon" class="w-4 h-4" />
+            <component :is="item.icon" class="w-3.5 h-3.5" />
             {{ item.name }}
           </router-link>
 
           <button
             @click="showSupportModal = true"
-            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all duration-200 cursor-pointer"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 whitespace-nowrap transition-all duration-200 cursor-pointer"
           >
-            <Heart class="w-4 h-4 text-rose-500" />
+            <Heart class="w-3.5 h-3.5 text-rose-500" />
             支持
           </button>
 
           <!-- User menu / Login button -->
-          <div v-if="isLoggedIn" class="relative ml-2 user-menu-wrapper">
+          <div v-if="isLoggedIn" class="relative ml-1 user-menu-wrapper shrink-0">
             <button
               @click="showUserMenu = !showUserMenu"
-              class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-slate-100 hover:bg-slate-200 text-slate-700"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 bg-slate-100 hover:bg-slate-200 text-slate-700"
             >
-              <UserIcon class="w-4 h-4" />
-              <span>{{ currentUser?.username }}</span>
+              <UserIcon class="w-3.5 h-3.5" />
+              <span class="max-w-[60px] truncate">{{ currentUser?.username }}</span>
             </button>
 
             <!-- Dropdown -->
@@ -259,9 +259,9 @@ onUnmounted(() => {
           <router-link
             v-else
             to="/login"
-            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
           >
-            <UserIcon class="w-4 h-4" />
+            <UserIcon class="w-3.5 h-3.5" />
             登录
           </router-link>
         </div>
