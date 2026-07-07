@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  lottery:
+    image: techfunways/lottery:latest
+    container_name: lottery-assistant
+    restart: unless-stopped
+    ports:
+      - "8902:8902"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8902
+      - DATA_DIR=/app/data
+      - ENV=production
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8902"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=3600
+      - WATCHTOWER_LABEL_ENABLE=true
+    command: lottery
