@@ -324,7 +324,7 @@ func (s *AnalysisService) GetAnalysis(lotteryType string, count int) (*AnalysisR
 	}
 	q := GetDB().Model(&models.DrawResult{}).
 		Where("lottery_type = ?", lotteryType).
-		Order("draw_date DESC")
+		Order("issue_number DESC")
 	if count > 0 {
 		q = q.Limit(count)
 	}

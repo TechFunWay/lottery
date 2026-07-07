@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.3.0
+version               = 1.3.1
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
 platform              = x86
@@ -11,6 +11,11 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
 changelog             = """
+v1.3.1 更新内容
+   Bug 修复
+   - 修复：批量复制购买记录部分失败时无回滚提示，现改为分别统计成功/失败数量
+   - 修复：号码分析服务按开奖日期排序可能不精确，改为按期号排序
+
 v1.3.0 更新内容
    新功能
    - 号码分析：完整的开奖号码分析页面，包含频率图、遗漏图、走势图、和值跨度走势

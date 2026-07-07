@@ -380,11 +380,19 @@ const confirmBatchCopy = async () => {
         remark: item.remark
       })
     )
-    await Promise.all(promises)
+    const results = await Promise.allSettled(promises)
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.filter(r => r.status === 'rejected').length
     showBatchModal.value = false
     selectedIds.value = []
     loadPurchases()
-    showToast('success', `成功复制 ${promises.length} 条记录`)
+    if (failed === 0) {
+      showToast('success', `成功复制 ${succeeded} 条记录`)
+    } else if (succeeded === 0) {
+      showToast('error', `全部失败，共 ${failed} 条`)
+    } else {
+      showToast('info', `成功 ${succeeded} 条，失败 ${failed} 条`)
+    }
   } catch (e) {
     console.error('批量复制失败', e)
     showToast('error', '批量复制失败')
