@@ -66,8 +66,7 @@ data/
 test-build
 
 .idea
-release/*
-!release/**/docker-compose*.yml
+release/
 backend/index.html
 backend/lottery-web
 techfunway-lottery/app/server/lottery
