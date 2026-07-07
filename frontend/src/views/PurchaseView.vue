@@ -20,6 +20,38 @@ const filterStatus = ref('')
 const deleteConfirm = ref(false)
 const deleteId = ref<number | null>(null)
 
+// 批量选择
+const selectedIds = ref<number[]>([])
+const showBatchModal = ref(false)
+const batchDate = ref(new Date().toISOString().split('T')[0])
+const batchIssue = ref('')
+const batchCopying = ref(false)
+
+const toggleSelect = (id: number) => {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx === -1) {
+    selectedIds.value.push(id)
+  } else {
+    selectedIds.value.splice(idx, 1)
+  }
+}
+
+const toggleSelectAll = () => {
+  if (selectedIds.value.length === purchases.value.length) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = purchases.value.map(p => p.id)
+  }
+}
+
+const clearSelection = () => {
+  selectedIds.value = []
+}
+
+const selectedPurchases = computed(() =>
+  purchases.value.filter(p => selectedIds.value.includes(p.id))
+)
+
 // 生成幸运号弹窗
 const showLuckyModal = ref(false)
 const selectedLotteryType = ref<LotteryType>('双色球')
@@ -316,6 +348,49 @@ const copyPurchase = (item: PurchaseRecord) => {
   currentBetCount.value = 1
   showModal.value = true
   refillNumbers()
+}
+
+// 批量复制
+const openBatchCopy = () => {
+  if (selectedIds.value.length === 0) return
+  batchDate.value = new Date().toISOString().split('T')[0]
+  batchIssue.value = ''
+  showBatchModal.value = true
+}
+
+const confirmBatchCopy = async () => {
+  if (!batchIssue.value.trim()) {
+    showToast('error', '请输入期号')
+    return
+  }
+  if (batchCopying.value) return
+  batchCopying.value = true
+  try {
+    const promises = selectedPurchases.value.map(item =>
+      purchaseApi.create({
+        lottery_type: item.lottery_type,
+        issue_number: batchIssue.value.trim(),
+        purchase_date: batchDate.value,
+        numbers: item.numbers,
+        bet_type: item.bet_type,
+        amount: item.amount,
+        multiple: item.multiple || 1,
+        append: item.append || false,
+        periods: item.periods || 1,
+        remark: item.remark
+      })
+    )
+    await Promise.all(promises)
+    showBatchModal.value = false
+    selectedIds.value = []
+    loadPurchases()
+    showToast('success', `成功复制 ${promises.length} 条记录`)
+  } catch (e) {
+    console.error('批量复制失败', e)
+    showToast('error', '批量复制失败')
+  } finally {
+    batchCopying.value = false
+  }
 }
 
 const openModal = (item?: PurchaseRecord) => {
@@ -616,6 +691,7 @@ const pageSize = ref(10)
 const total = ref(0)
 
 watch([currentPage, pageSize], () => {
+  clearSelection()
   loadPurchases()
 })
 
@@ -673,7 +749,7 @@ const recheckWinnings = async () => {
       <div class="relative">
         <select
           v-model="filterType"
-          @change="loadPurchases"
+          @change="clearSelection(); loadPurchases()"
           class="appearance-none px-4 py-2 pr-10 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 cursor-pointer"
         >
           <option value="">全部类型</option>
@@ -684,7 +760,7 @@ const recheckWinnings = async () => {
       <div class="relative">
         <select
           v-model="filterStatus"
-          @change="loadPurchases"
+          @change="clearSelection(); loadPurchases()"
           class="appearance-none px-4 py-2 pr-10 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 cursor-pointer"
         >
           <option value="">全部状态</option>
@@ -705,6 +781,23 @@ const recheckWinnings = async () => {
       </button>
     </div>
 
+    <!-- 批量操作栏 -->
+    <div v-if="selectedIds.length > 0" class="flex items-center gap-3 mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+      <span class="text-sm text-blue-600">已选择 {{ selectedIds.length }} 条记录</span>
+      <button
+        @click="openBatchCopy"
+        class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg font-medium transition-colors cursor-pointer"
+      >
+        批量复制
+      </button>
+      <button
+        @click="clearSelection"
+        class="px-4 py-1.5 text-slate-500 hover:bg-slate-100 text-sm rounded-lg font-medium transition-colors cursor-pointer"
+      >
+        取消选择
+      </button>
+    </div>
+
     <!-- Table -->
     <div class="bg-white rounded-2xl card-shadow overflow-hidden">
       <div v-if="loading" class="flex justify-center py-12">
@@ -722,6 +815,12 @@ const recheckWinnings = async () => {
           <div v-for="item in purchases" :key="item.id" class="bg-slate-50 rounded-xl p-4">
             <div class="flex items-start justify-between mb-2">
               <div class="flex items-center gap-2 flex-wrap">
+                <input
+                  type="checkbox"
+                  :checked="selectedIds.includes(item.id)"
+                  @change="toggleSelect(item.id)"
+                  class="w-4 h-4 text-blue-500 border-slate-300 rounded focus:ring-blue-400 cursor-pointer"
+                />
                 <span class="font-medium text-slate-800 text-sm">{{ item.lottery_type }}</span>
                 <span class="text-slate-400 text-xs">期号 {{ item.issue_number }}</span>
                 <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="statusColors[item.status]">
@@ -817,6 +916,14 @@ const recheckWinnings = async () => {
           <table class="w-full">
             <thead class="bg-slate-50 border-b border-slate-100">
               <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 w-10">
+                  <input
+                    type="checkbox"
+                    :checked="selectedIds.length === purchases.length && purchases.length > 0"
+                    @change="toggleSelectAll"
+                    class="w-4 h-4 text-blue-500 border-slate-300 rounded focus:ring-blue-400 cursor-pointer"
+                  />
+                </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500">彩票类型</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500">期号</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500">投注/开奖号码</th>
@@ -830,6 +937,14 @@ const recheckWinnings = async () => {
             </thead>
             <tbody class="divide-y divide-slate-100">
               <tr v-for="item in purchases" :key="item.id" class="hover:bg-slate-50">
+                <td class="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    :checked="selectedIds.includes(item.id)"
+                    @change="toggleSelect(item.id)"
+                    class="w-4 h-4 text-blue-500 border-slate-300 rounded focus:ring-blue-400 cursor-pointer"
+                  />
+                </td>
                 <td class="px-4 py-3 text-sm font-medium text-slate-700">{{ item.lottery_type }}</td>
                 <td class="px-4 py-3 text-sm text-slate-600">{{ item.issue_number }}</td>
                 <td class="px-4 py-3">
@@ -1033,6 +1148,69 @@ const recheckWinnings = async () => {
         <div class="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex justify-end gap-3">
           <button @click="closeModal" class="px-5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer">取消</button>
           <button @click="savePurchase" class="px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors cursor-pointer">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批量复制弹窗 -->
+    <div v-if="showBatchModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showBatchModal = false"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slide-up">
+        <div class="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <h2 class="text-lg font-semibold text-slate-800">批量复制</h2>
+          <button @click="showBatchModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <!-- 选中记录预览 -->
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-2">选中记录 ({{ selectedPurchases.length }} 条)</label>
+            <div class="max-h-40 overflow-y-auto space-y-1.5">
+              <div v-for="item in selectedPurchases" :key="item.id" class="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
+                <span class="font-medium">{{ item.lottery_type }}</span>
+                <span class="text-slate-400">|</span>
+                <span>{{ item.issue_number }}</span>
+                <span class="text-slate-400">|</span>
+                <span class="text-xs">{{ item.bet_type }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 新期号 -->
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">
+              新期号<span class="text-red-500 ml-0.5">*</span>
+            </label>
+            <input
+              v-model="batchIssue"
+              placeholder="如：2024016"
+              class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400"
+            />
+          </div>
+
+          <!-- 新日期 -->
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1.5">新购买日期</label>
+            <input v-model="batchDate" type="date" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400" />
+          </div>
+        </div>
+
+        <div class="border-t border-slate-100 px-6 py-4 flex gap-3">
+          <button
+            @click="showBatchModal = false"
+            class="flex-1 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmBatchCopy"
+            :disabled="batchCopying"
+            class="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ batchCopying ? '复制中...' : '确认复制' }}
+          </button>
         </div>
       </div>
     </div>
