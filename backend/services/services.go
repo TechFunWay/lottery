@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -163,8 +164,104 @@ type shuangSeQiuAPIResp struct {
 	} `json:"data"`
 }
 
+// cwlDrawItem 中国福彩官网开奖结果
+type cwlDrawItem struct {
+	Name string `json:"name"`
+	Code string `json:"code"`
+	Date string `json:"date"`
+	Red  string `json:"red"`
+	Blue string `json:"blue"`
+}
+
+type cwlResp struct {
+	State  int           `json:"state"`
+	Result []cwlDrawItem `json:"result"`
+}
+
+// fetchShuangSeQiu 抓取双色球开奖结果（优先使用中国福彩官网API，支持指定期号）
 func (s *DrawService) fetchShuangSeQiu(issue string) (*models.DrawResult, error) {
-	url := "http://api.huiniao.top/interface/home/lotteryHistory?type=ssq&page=1&limit=1"
+	// 使用中国福彩官网API，批量获取最近100期
+	url := "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=100"
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Referer", "https://www.cwl.gov.cn/")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// 官网API失败，降级到惠鸟API
+		return s.fetchShuangSeQiuHuiniao(issue)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var apiResp cwlResp
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析开奖数据失败: %v", err)
+	}
+
+	if apiResp.State != 0 || len(apiResp.Result) == 0 {
+		return nil, fmt.Errorf("未找到开奖数据")
+	}
+
+	// 如果指定了期号，查找对应记录
+	var item *cwlDrawItem
+	if issue != "" {
+		for i := range apiResp.Result {
+			if apiResp.Result[i].Code == issue {
+				item = &apiResp.Result[i]
+				break
+			}
+		}
+		if item == nil {
+			return nil, fmt.Errorf("未找到第 %s 期开奖数据", issue)
+		}
+	} else {
+		item = &apiResp.Result[0]
+	}
+
+	// 解析红球（逗号分隔）
+	var red []int
+	for _, s := range strings.Split(item.Red, ",") {
+		if n := parseInt(strings.TrimSpace(s)); n > 0 {
+			red = append(red, n)
+		}
+	}
+	blue := []int{parseInt(item.Blue)}
+
+	numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{
+		Red:  red,
+		Blue: blue,
+	})
+
+	// 解析日期 "2026-07-07(二)" -> "2026-07-07"
+	dateStr := item.Date
+	if idx := strings.Index(dateStr, "("); idx > 0 {
+		dateStr = dateStr[:idx]
+	}
+	drawDate, _ := time.Parse("2006-01-02", dateStr)
+
+	draw := &models.DrawResult{
+		LotteryType: models.ShuangSeQiu,
+		IssueNumber: item.Code,
+		DrawDate:    drawDate,
+		Numbers:     string(numbersJSON),
+		Source:      "auto",
+	}
+	return draw, nil
+}
+
+// fetchShuangSeQiuHuiniao 惠鸟API降级方案
+func (s *DrawService) fetchShuangSeQiuHuiniao(issue string) (*models.DrawResult, error) {
+	url := "http://api.huiniao.top/interface/home/lotteryHistory?type=ssq&page=1&limit=100"
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
@@ -193,24 +290,43 @@ func (s *DrawService) fetchShuangSeQiu(issue string) (*models.DrawResult, error)
 		return nil, fmt.Errorf("未找到开奖数据: %s", apiResp.Info)
 	}
 
-	item := apiResp.Data.Data.List[0]
-	// 解析号码
+	// 如果指定了期号，查找对应记录
+	list := apiResp.Data.Data.List
+	if issue != "" {
+		found := false
+		for _, r := range list {
+			if r.Code == issue {
+				red := []int{parseInt(r.One), parseInt(r.Two), parseInt(r.Three), parseInt(r.Four), parseInt(r.Five), parseInt(r.Six)}
+				blue := []int{parseInt(r.Seven)}
+				numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{Red: red, Blue: blue})
+				drawDate, _ := time.Parse("2006-01-02", r.Day)
+				return &models.DrawResult{
+					LotteryType: models.ShuangSeQiu,
+					IssueNumber: r.Code,
+					DrawDate:    drawDate,
+					Numbers:     string(numbersJSON),
+					Source:      "auto",
+				}, nil
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("未找到第 %s 期开奖数据", issue)
+		}
+	}
+
+	// 默认取第一条
+	item := list[0]
 	red := []int{parseInt(item.One), parseInt(item.Two), parseInt(item.Three), parseInt(item.Four), parseInt(item.Five), parseInt(item.Six)}
 	blue := []int{parseInt(item.Seven)}
-	numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{
-		Red:  red,
-		Blue: blue,
-	})
-
+	numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{Red: red, Blue: blue})
 	drawDate, _ := time.Parse("2006-01-02", item.Day)
-	draw := &models.DrawResult{
+	return &models.DrawResult{
 		LotteryType: models.ShuangSeQiu,
 		IssueNumber: item.Code,
 		DrawDate:    drawDate,
 		Numbers:     string(numbersJSON),
 		Source:      "auto",
-	}
-	return draw, nil
+	}, nil
 }
 
 type daLeTouAPIResp struct {
@@ -322,8 +438,80 @@ func (s *DrawService) FetchBatchDrawResults(lotteryType models.LotteryType, star
 	}
 }
 
-// fetchBatchShuangSeQiu 批量抓取双色球
+// fetchBatchShuangSeQiu 批量抓取双色球（使用中国福彩官网API）
 func (s *DrawService) fetchBatchShuangSeQiu(startDate, endDate string, count int) ([]*models.DrawResult, error) {
+	// 限制最大数量
+	if count > 100 {
+		count = 100
+	}
+	if count <= 0 {
+		count = 20
+	}
+
+	url := fmt.Sprintf("https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=%d", count)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Referer", "https://www.cwl.gov.cn/")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// 降级到惠鸟API
+		return s.fetchBatchShuangSeQiuHuiniao(startDate, endDate, count)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var apiResp cwlResp
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析开奖数据失败: %v", err)
+	}
+
+	if apiResp.State != 0 || len(apiResp.Result) == 0 {
+		return nil, fmt.Errorf("获取双色球开奖数据失败")
+	}
+
+	var results []*models.DrawResult
+	for _, item := range apiResp.Result {
+		// 解析红球
+		var red []int
+		for _, s := range strings.Split(item.Red, ",") {
+			if n := parseInt(strings.TrimSpace(s)); n > 0 {
+				red = append(red, n)
+			}
+		}
+		blue := []int{parseInt(item.Blue)}
+		numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{Red: red, Blue: blue})
+
+		// 解析日期
+		dateStr := item.Date
+		if idx := strings.Index(dateStr, "("); idx > 0 {
+			dateStr = dateStr[:idx]
+		}
+		drawDate, _ := time.Parse("2006-01-02", dateStr)
+
+		draw := &models.DrawResult{
+			LotteryType: models.ShuangSeQiu,
+			IssueNumber: item.Code,
+			DrawDate:    drawDate,
+			Numbers:     string(numbersJSON),
+			Source:      "auto",
+		}
+		results = append(results, draw)
+	}
+	return results, nil
+}
+
+// fetchBatchShuangSeQiuHuiniao 惠鸟API降级方案
+func (s *DrawService) fetchBatchShuangSeQiuHuiniao(startDate, endDate string, count int) ([]*models.DrawResult, error) {
 	url := fmt.Sprintf("http://api.huiniao.top/interface/home/lotteryHistory?type=ssq&page=1&limit=%d", count)
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -357,10 +545,7 @@ func (s *DrawService) fetchBatchShuangSeQiu(startDate, endDate string, count int
 	for _, item := range apiResp.Data.Data.List {
 		red := []int{parseInt(item.One), parseInt(item.Two), parseInt(item.Three), parseInt(item.Four), parseInt(item.Five), parseInt(item.Six)}
 		blue := []int{parseInt(item.Seven)}
-		numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{
-			Red:  red,
-			Blue: blue,
-		})
+		numbersJSON, _ := json.Marshal(rules.ShuangSeQiuNumbers{Red: red, Blue: blue})
 		drawDate, _ := time.Parse("2006-01-02", item.Day)
 		draw := &models.DrawResult{
 			LotteryType: models.ShuangSeQiu,
