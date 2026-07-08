@@ -67,13 +67,19 @@ test-build
 
 .idea
 release/
+
+# 编译产物
 backend/index.html
 backend/lottery-web
-techfunway-lottery/app/server/lottery
-techfunway-lottery/app/www
-techfunway-lottery/techfunway-lottery.fpk
-*.fpk
 lottery-web
 index.html
 lottery
 develop/*
+
+# 飞牛应用编译产物
+techfunway-lottery/app/server/lottery
+techfunway-lottery/app/www/
+techfunway-lottery/app/cmd/
+techfunway-lottery/app/wizard/
+techfunway-lottery/techfunway-lottery.fpk
+*.fpk
