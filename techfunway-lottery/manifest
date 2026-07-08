@@ -1,7 +1,7 @@
 appname               = techfunway-lottery
 version               = 1.3.0
 display_name          = 彩彩助手
-desc                  = 彩彩助手，帮助你记录购买记录和投入产出分析
+desc                  = 彩彩助手，帮助你记录彩彩购买、自动识别中奖、统计分析盈亏，支持多种彩彩类型和竞彩足球
 platform              = x86
 source                = thirdparty
 maintainer            = 科技智趣坊
