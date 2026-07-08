@@ -1,459 +1,274 @@
-# 彩彩助手 - 中奖记录管理系统
+# 彩彩助手
 
 一个帮助您记录彩票购买、自动识别中奖情况、并提供全面统计分析的系统。
+
+> **当前版本**: v1.3.0 | **开源协议**: MIT
 
 **注意**: 本应用包含匿名使用统计功能，会收集设备标识码用于统计独立设备数量。详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
 
 ## 功能特性
 
-- **多用户系统**：支持用户注册、登录、权限管理
-- **数据隔离**：每个用户只能访问自己的数据，保证隐私安全
-- **管理员管理**：管理员可以管理系统用户，启用/禁用账号
-- **MD5密码加密**：前后端双重加密，确保密码安全
-- **JWT认证**：基于令牌的身份验证机制
-- **支持多种彩票类型**：双色球、大乐透、福彩3D、排列3、排列5、七乐彩
+### 彩票管理
+- **支持 7 种彩票类型**：双色球、大乐透、福彩3D、排列3、排列5、七乐彩、七星彩
 - **购买记录管理**：记录购买日期、彩票类型、期号、选号、购买金额、投注方式
+- **批量复制**：选中多条记录，统一修改日期和期号后批量创建
+- **幸运号生成**：一键随机生成号码并快速添加到购买记录
+
+### 开奖与中奖
 - **开奖结果管理**：支持手动录入和自动抓取开奖结果
 - **中奖自动识别**：根据彩票规则自动匹配号码，识别中奖等级和奖金
-- **统计分析**：
-  - 盈亏总览（总投入 vs 总中奖金额）
-  - 各奖级中奖次数分布
-  - 号码热冷分析
-  - 中奖率趋势图
+- **双色球福运奖**：支持按期手动标记（中3红奖5元）
+- **历史命中统计**：查看号码历史出现次数和分布
+
+### 数据分析
+- **号码分析页面**：频率图、遗漏图、走势图、和值跨度走势
+- **盈亏总览**：总投入 vs 总中奖金额，净收益统计
+- **奖级分布**：各奖级中奖次数和金额分布饼图
+- **趋势分析**：月度投入/中奖趋势图，中奖率变化
+
+### 竞彩足球
+- **赛事管理**：从 sporttery 官方抓取赛程和赔率
+- **投注记录**：支持单关和串关（2-8串1）
+- **结果抓取**：从 api-football 获取比赛结果并自动计算中奖
+- **盈亏概览**：足球投注的投入产出统计
+
+### 用户系统
+- **多用户支持**：用户注册、登录、权限管理
+- **数据隔离**：每个用户只能访问自己的数据
+- **管理员功能**：用户管理、全局配置、系统升级
 
 ## 技术栈
 
-- **前端**：Vue 3 + TypeScript + Vite + TailwindCSS + ECharts
-- **后端**：Go + Gin 框架 + GORM
-- **数据库**：SQLite
-- **日志**：Zap + Lumberjack（日志轮转）
+| 层级 | 技术 |
+|------|------|
+| 前端 | Vue 3 + TypeScript + Vite + TailwindCSS + ECharts |
+| 后端 | Go 1.25 + Gin + GORM |
+| 数据库 | SQLite (pure Go, 无 CGo 依赖) |
+| 日志 | Zap + Lumberjack (日志轮转) |
+| 认证 | JWT + MD5 双重密码加密 |
 
 ## 项目结构
 
 ```
-caipiao/
-├── backend/              # Go 后端
-│   ├── main.go          # 程序入口
-│   ├── models/          # 数据模型
-│   ├── handlers/        # API 处理器
-│   ├── services/        # 业务逻辑
-│   ├── rules/           # 彩票中奖规则引擎
-│   └── database/        # 数据库连接
-├── frontend/            # Vue 前端
-│   ├── src/
-│   │   ├── views/       # 页面视图
-│   │   ├── components/  # 组件
-│   │   ├── api/         # API 封装
-│   │   └── types/       # TypeScript 类型
-│   └── dist/            # 构建输出
-└── README.md
+lottery/
+├── backend/                    # Go 后端
+│   ├── main.go                # 程序入口
+│   ├── models/                # 数据模型
+│   │   ├── models.go          # 购买/开奖/中奖记录
+│   │   ├── user.go            # 用户模型
+│   │   ├── football.go        # 足球模型
+│   │   └── config.go          # 系统配置
+│   ├── handlers/              # API 处理器
+│   │   ├── auth_handler.go    # 认证接口
+│   │   ├── purchase_handler.go # 购买记录
+│   │   ├── draw_handler.go    # 开奖管理
+│   │   ├── stats_handler.go   # 统计分析
+│   │   ├── football_handler.go # 竞彩足球
+│   │   └── config_handler.go  # 系统配置
+│   ├── services/              # 业务逻辑
+│   │   ├── auth_service.go    # 认证服务
+│   │   ├── football_service.go # 足球数据抓取
+│   │   ├── analysis_service.go # 号码分析
+│   │   └── upgrade_service.go # 系统升级
+│   ├── rules/                 # 彩票规则引擎
+│   │   ├── calculator.go      # 彩票中奖计算
+│   │   └── football_calculator.go # 足球中奖计算
+│   ├── migrations/            # 数据库迁移
+│   ├── database/              # 数据库连接
+│   ├── middleware/             # 中间件 (JWT)
+│   └── logger/                # 日志配置
+├── frontend/                   # Vue 前端
+│   └── src/
+│       ├── views/             # 页面视图 (12个)
+│       │   ├── HomeView.vue           # 仪表盘
+│       │   ├── PurchaseView.vue       # 购买记录
+│       │   ├── DrawView.vue           # 开奖管理
+│       │   ├── WinningsView.vue       # 中奖记录
+│       │   ├── HistoryHitView.vue     # 历史命中
+│       │   ├── StatisticsView.vue     # 统计分析
+│       │   ├── AnalysisView.vue       # 号码分析
+│       │   ├── FootballView.vue       # 竞彩足球
+│       │   ├── FootballMatchView.vue  # 比赛管理
+│       │   ├── FootballBetView.vue    # 投注记录
+│       │   ├── SettingsView.vue       # 数据源设置
+│       │   └── UserManageView.vue     # 用户管理
+│       ├── components/        # 组件
+│       │   ├── NumberInput.vue        # 彩票号码输入
+│       │   ├── DigitNumberInput.vue   # 数字型彩票输入
+│       │   ├── FootballBetForm.vue    # 足球投注表单
+│       │   └── analysis/             # 分析图表组件
+│       │       ├── FrequencyChart.vue # 频率图
+│       │       ├── OmissionChart.vue  # 遗漏图
+│       │       ├── TrendChart.vue     # 走势图
+│       │       └── MetricsChart.vue   # 指标图
+│       ├── api/index.ts       # API 封装
+│       ├── types/index.ts     # TypeScript 类型定义
+│       ├── router/index.ts    # 路由配置
+│       └── utils/crypto.ts    # 密码加密工具
+├── techfunway-lottery/         # 飞牛 NAS 应用
+│   ├── manifest               # 应用清单 (版本/描述/更新日志)
+│   ├── app/                   # 应用资源
+│   └── wizard/                # 安装向导
+├── Dockerfile                  # Docker 开发镜像 (多阶段构建)
+├── Dockerfile.release          # Docker 发布镜像 (基于 scratch)
+├── Makefile                    # 构建脚本
+└── .skill/                     # 自动化脚本
+    ├── cross-platform-compile/ # 跨平台编译
+    ├── fnnas-packager/         # 飞牛打包
+    ├── frontend-build/         # 前端构建
+    └── docker-builder/         # Docker 构建
 ```
 
 ## 快速开始
 
-### 自动化构建系统（推荐）
-
-项目提供了完整的自动化构建系统，支持开发环境和发布环境的构建。
-
-#### 开发环境（一键启动）
+### 方式一：Docker 部署 (推荐)
 
 ```bash
-# 方法1: 使用 Makefile（完整流程）
-make dev
+# 拉取镜像
+docker pull techfunways/lottery:latest
 
-# 方法2: 使用启动脚本
-./start.sh dev
-
-# 方法3: 使用环境变量自定义
-PORT=8080 DATA_DIR=/path/to/data make dev
+# 运行
+docker run -d \
+  --name lottery \
+  -p 8902:8902 \
+  -v ./data:/app/data \
+  techfunways/lottery:latest
 ```
-
-这会自动：
-1. 构建前端（Vue 3 + TypeScript）
-2. 构建后端（Go）
-3. 启动服务（默认端口 8902）
 
 访问地址：`http://localhost:8902`
 
-#### 发布环境（多平台打包）
+### 方式二：Docker Compose
 
 ```bash
-# 方法1: 使用 Makefile
-make release
+# 固定版本
+docker-compose -f docker-compose-v1.3.0.yml up -d
 
-# 方法2: 使用启动脚本
-./start.sh release
+# 自动更新版（含 watchtower）
+docker-compose -f docker-compose-latest.yml up -d
+```
+
+### 方式三：源码构建
+
+```bash
+# 一键开发环境
+make dev
+
+# 访问 http://localhost:8902
+```
+
+### 方式四：手动启动
+
+```bash
+# 后端
+cd backend && go run main.go
+
+# 前端（开发模式）
+cd frontend && npm install && npm run dev
+```
+
+## 配置说明
+
+### 命令行参数
+
+```bash
+./lottery -port 9000 -data-dir /var/lottery/data
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-port` | 服务端口 | 8902 |
+| `-data-dir` | 数据目录 | ./data |
+| `-web-dir` | 前端目录 | ./ |
+| `-version` | 显示版本号 | - |
+
+### 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `PORT` | 服务端口 | 8902 |
+| `DATA_DIR` | 数据目录 | ./data |
+| `DB_PATH` | 数据库路径 | ./data/db/database.db |
+| `ENV` | 运行环境 | production |
+| `DISABLE_STATS` | 禁用统计 | false |
+| `API_FOOTBALL_KEY` | 足球 API Key | - |
+
+## 数据存储
+
+```
+data/
+├── db/                     # 数据库文件
+│   └── lottery-assistant.db
+├── logs/                   # 日志文件
+│   ├── app.log
+│   └── app-*.log
+└── device_id.txt           # 设备标识码
+```
+
+### 数据库表
+
+| 表名 | 说明 |
+|------|------|
+| `users` | 用户信息 |
+| `purchase_records` | 购买记录 |
+| `draw_results` | 开奖结果 |
+| `winning_records` | 中奖记录 |
+| `football_matches` | 足球比赛 |
+| `football_bets` | 足球投注 |
+| `system_configs` | 系统配置 |
+
+## 构建发布
+
+```bash
+# 完整发布流程
+make release
 ```
 
 这会自动：
 1. 构建前端
-2. 跨平台编译（macOS, Linux, Windows）
-3. 打包飞牛 NAS 应用（.fpk 文件）
+2. 跨平台编译 (macOS/Linux/Windows × amd64/arm64)
+3. 打包飞牛 NAS 应用 (.fpk)
+4. 生成 Docker 镜像
 
-#### 更多命令
+### 输出目录
+
+```
+release/v1.3.0/
+├── lottery-assistant-v1.3.0-darwin-amd64/
+├── lottery-assistant-v1.3.0-darwin-arm64/
+├── lottery-assistant-v1.3.0-linux-amd64/
+├── lottery-assistant-v1.3.0-linux-arm64/
+├── lottery-assistant-v1.3.0-windows-amd64/
+├── lottery-assistant-v1.3.0-windows-arm64/
+├── techfunway-lottery-v1.3.0-arm.fpk
+└── techfunway-lottery-v1.3.0-x86.fpk
+```
+
+### Docker 镜像
 
 ```bash
-# 显示所有可用命令
-make help
-./start.sh help
+# 构建多架构镜像
+bash .skill/docker-builder/scripts/docker_builder.sh
 
-# 仅构建前端
-make dev-frontend
-
-# 仅构建后端
-make dev-backend
-
-# 仅运行服务（不构建）
-make run
-
-# 清理构建产物
-make clean
-./start.sh clean
-
-# 检查依赖
-make check-deps
-
-# 显示版本信息
-make version
+# 输出
+techfunways/lottery:v1.3.0
+techfunways/lottery:latest
 ```
 
-### 传统方式（手动启动）
+## 开发指南
 
-#### 首次使用（系统初始化）
+### 添加新彩票类型
 
-1. 启动后端服务
-```bash
-cd backend
-go run main.go
-```
-
-2. 启动前端服务
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-3. 访问应用
-打开浏览器访问 `http://localhost:8902`
-
-4. 注册管理员账号
-首次访问时，系统会检测到没有管理员用户，显示"注册管理员账号"选项。注册第一个用户，该用户将自动成为管理员。
-
-### 日常使用
-
-1. **登录**：使用用户名和密码登录系统
-2. **普通用户**：可以访问购买记录、开奖管理、中奖记录、统计分析等功能，所有数据仅限于当前用户
-3. **管理员**：除了普通用户的所有功能，还可以访问"用户管理"菜单，管理所有用户账号
-
-### 启动后端服务
-
-```bash
-cd backend
-go run -tags=dev main.go
-```
-
-后端服务将在 `http://localhost:8902` 启动
-
-**命令行参数：**
-
-```bash
-# 指定端口
-go run -tags=dev main.go -port 9000
-
-# 指定数据目录
-go run -tags=dev main.go -data-dir /var/lottery/data
-
-# 组合使用
-go run -tags=dev main.go -port 9000 -data-dir /var/lottery/data
-
-# 查看版本
-./lottery-assistant -version
-
-# 查看帮助
-./lottery-assistant -help
-```
-
-**环境变量：**
-
-```bash
-# 使用环境变量配置（优先级高于命令行参数）
-PORT=8080 DB_PATH=./custom.db go run -tags=dev main.go
-
-# 开发环境
-ENV=development go run -tags=dev main.go
-
-# 生产环境
-ENV=production go run -tags=dev main.go
-
-# 禁用使用统计（可选）
-DISABLE_STATS=true go run -tags=dev main.go
-```
-
-### 启动前端服务
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-前端服务将在 `http://localhost:5173` 启动
-
-### 访问应用
-
-打开浏览器访问 `http://localhost:5173`
-
-### 用户管理
-
-#### 首次使用
-1. 访问系统后，如果检测到没有管理员，会显示"注册管理员账号"
-2. 填写用户名、密码（至少6位）和可选的邮箱
-3. 点击注册，该用户将成为系统的唯一管理员
-
-#### 日常登录
-1. 点击导航栏的"登录"按钮
-2. 输入用户名和密码
-3. 登录成功后可以访问所有功能
-
-#### 管理员功能
-1. 登录后，导航栏会显示"用户管理"菜单（仅管理员可见）
-2. 可以查看所有用户列表
-3. 可以启用/禁用用户账号
-4. 可以删除普通用户（不能删除管理员）
-5. 注意：系统始终保证至少有一个管理员
-
-## 使用指南
-
-### 录入购买记录
-
-1. 点击顶部导航「购买记录」
-2. 点击「新增记录」按钮
-3. 选择彩票类型、填写期号、购买日期
-4. 输入号码（根据彩票类型自动适配输入格式）
-5. 选择投注方式、填写金额
-6. 点击「保存」
-
-### 录入开奖结果
-
-1. 点击顶部导航「开奖管理」
-2. 点击「录入开奖」按钮
-3. 选择彩票类型、填写期号
-4. 对于双色球和大乐透，可点击「自动抓取开奖结果」按钮从官方接口获取
-5. 或手动输入开奖号码
-6. 点击「保存」
-
-### 查看统计分析
-
-1. 点击顶部导航「统计分析」
-2. 查看盈亏总览卡片
-3. 浏览盈亏趋势图、奖级分布饼图、中奖率趋势图
-
-## API 接口
-
-### 认证接口（无需登录）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/auth/register | 用户注册 |
-| POST | /api/auth/login | 用户登录 |
-| GET | /api/auth/check-admin | 检查管理员是否存在 |
-
-### 用户接口（需要登录）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/auth/me | 获取当前用户信息 |
-
-### 用户管理（需要管理员）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/users | 获取所有用户 |
-| PUT | /api/users/:id | 更新用户（状态/角色） |
-| DELETE | /api/users/:id | 删除用户 |
-
-### 业务接口（需要登录）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/statistics/overview | 盈亏总览 |
-| GET | /api/purchases | 购买记录列表 |
-| POST | /api/purchases | 创建购买记录 |
-| GET | /api/draws | 开奖结果列表 |
-| POST | /api/draws | 创建开奖结果 |
-| GET | /api/draws/fetch | 自动抓取开奖结果 |
-| GET | /api/winnings | 中奖记录列表 |
-| GET | /api/statistics/trends | 趋势数据 |
-
-### 安全特性
-
-- **JWT认证**：所有业务接口需要携带有效的JWT令牌
-- **权限控制**：管理员接口需要管理员权限
-- **数据隔离**：每个用户只能访问自己的数据
-- **密码加密**：前后端MD5双重加密
-
-## 彩票规则说明
-
-### 双色球
-- 红球：6个，范围 01-33
-- 蓝球：1个，范围 01-16
-- 奖级：一等奖（6红+1蓝）、二等奖（6红）、三等奖（5红+1蓝）...六等奖（1红+1蓝 或 0红+1蓝）
-
-### 大乐透
-- 前区：5个，范围 01-35
-- 后区：2个，范围 01-12
-- 奖级：一等奖（5前+2后）...七等奖（0前+1后 或 1前+0后）
-
-### 福彩3D
-- 3个数字，每个 0-9
-- 奖级：直选（完全一致）、组选6（3个不同数字任意顺序）、组选3（2个相同+1个不同任意顺序）
-
-### 排列3/排列5
-- 3个/5个数字，每个 0-9
-- 直选（完全一致）、组选
-
-### 七乐彩
-- 7个球，范围 01-30
-- 另有1个特别号
-- 奖级：一等奖（7个主球）...七等奖
-
-## 数据存储
-
-### 目录结构
-
-```
-data/
-├── db/                     # 数据库文件目录
-│   └── lottery-assistant.db
-└── logs/                   # 日志文件目录
-    ├── app.log             # 当前日志文件
-    ├── app-2024-03-20.log  # 历史日志（已归档）
-    └── app-2024-03-19.log  # 历史日志（已归档）
-```
-
-### 数据库
-
-数据存储在 SQLite 数据库中，默认路径为 `data/db/lottery-assistant.db`，包含以下表：
-
-- `purchase_records` - 购买记录
-- `draw_results` - 开奖结果
-- `winning_records` - 中奖记录
-- `users` - 用户信息
-- `system_configs` - 系统配置
-
-### 日志系统
-
-使用 Zap + Lumberjack 实现结构化日志和日志轮转：
-
-**日志轮转配置：**
-- 单个日志文件最大 100MB
-- 保留最近 10 个备份文件
-- 保留 30 天历史日志
-- 自动压缩旧日志文件
-
-**日志输出：**
-- 同时输出到文件 (`data/logs/app.log`) 和控制台
-- 结构化日志格式，包含时间、级别、调用者信息
-- 错误级别自动记录堆栈信息
-
-**配置方式：**
-
-优先级：环境变量 > 命令行参数 > 默认值
-
-| 配置项 | 命令行参数 | 环境变量 | 默认值 |
-|--------|-----------|---------|--------|
-| 端口 | `-port` | `PORT` | 8902 |
-| 数据目录 | `-data-dir` | - | ./data |
-| 数据库路径 | - | `DB_PATH` | ./data/db/database.db |
-| 环境 | - | `ENV` | production |
-| 使用统计 | - | `DISABLE_STATS` | false (启用) |
-
-**示例：**
-```bash
-# 命令行参数
-./lottery-assistant -port 9000 -data-dir /var/lottery/data
-
-# 环境变量
-PORT=8080 DB_PATH=./custom.db ./lottery-assistant
-
-# 混合使用
-PORT=8080 ./lottery-assistant -data-dir /var/lottery/data
-```
-
-## 开发说明
-
-### 添加新的彩票类型
-
-1. 在 `backend/models/models.go` 添加新的彩票类型枚举
-2. 在 `backend/rules/calculator.go` 实现中奖计算规则
-3. 在 `frontend/src/types/index.ts` 添加类型配置
-4. 在 `frontend/src/components/NumberInput.vue` 添加输入适配
+1. `backend/models/models.go` - 添加类型枚举
+2. `backend/rules/calculator.go` - 实现中奖计算
+3. `frontend/src/types/index.ts` - 添加类型配置
+4. `frontend/src/components/NumberInput.vue` - 适配输入
 
 ### 查看日志
 
 ```bash
-# 实时查看日志
 tail -f data/logs/app.log
-
-# 查看最近的日志
-tail -n 100 data/logs/app.log
-
-# 搜索错误日志
 grep ERROR data/logs/app.log
-
-# 查看特定日期的日志
-cat data/logs/app-2024-03-20.log
 ```
-
-## 使用统计与隐私
-
-### 统计功能说明
-
-彩彩助手应用包含匿名使用统计功能，用于帮助开发者了解：
-
-1. **设备统计** - 统计独立设备数量
-2. **版本分布** - 了解不同版本的使用情况
-3. **平台统计** - 了解不同操作系统和架构的用户分布
-
-### 收集的数据
-
-统计会收集以下匿名数据：
-
-1. **设备标识码** - 基于系统信息生成的唯一标识符（MD5哈希）
-2. **系统信息** - 操作系统类型、架构、主机名
-3. **应用信息** - 应用版本号
-
-**注意**：不收集任何个人身份信息、购买记录、中奖信息等敏感数据。
-
-### 设备标识码生成原理
-
-设备标识码基于以下系统信息生成：
-- 操作系统类型和架构
-- 主机名（如果可获取）
-- 系统硬件信息（根据不同平台）
-
-生成的标识码使用 MD5 哈希算法，无法反向推导原始信息。
-
-### 如何禁用统计
-
-```bash
-# 方法1: 使用环境变量
-DISABLE_STATS=true ./lottery
-
-# 方法2: 使用 Makefile
-DISABLE_STATS=true make dev
-
-# 方法3: 使用启动脚本
-DISABLE_STATS=true ./start.sh dev
-```
-
-### 查看设备标识码
-
-应用启动时会显示设备标识码，格式为 32 位十六进制字符串：
-```
-📱 设备标识码: 5d41402abc4b2a76b9719d911017c592
-```
-
-设备标识码存储在本地 `./data/device_id.txt` 文件中。
-
-详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
 
 ## 版本更新日志
 
@@ -462,7 +277,7 @@ DISABLE_STATS=true ./start.sh dev
 **新功能**
 - 号码分析：完整的开奖号码分析页面，包含频率图、遗漏图、走势图、和值跨度走势
 - 双色球：福运奖按期手动标记（中3红奖5元）
-- 应用图标改为 emerald 绿主题（配合 UI 主色）
+- 应用图标改为 emerald 绿主题
 
 **改进**
 - 号码输入框：单位数自动补零显示（如 5 显示为 05）
@@ -472,53 +287,46 @@ DISABLE_STATS=true ./start.sh dev
 
 **Bug 修复**
 - 修复：号码分析走势图 tooltip 显示真实号码
-- 修复：号码分析页清理过时注释
-- 修复：批量复制购买记录部分失败时无回滚提示，现改为分别统计成功/失败数量
-- 修复：号码分析服务按开奖日期排序可能不精确，改为按期号排序
+- 修复：批量复制购买记录部分失败时无回滚提示
+- 修复：号码分析服务按开奖日期排序可能不精确
 
 ### v1.2.0 (2026-04-13)
 
 **新功能**
-- 竞彩足球：数据源切换为 sporttery 官方(赛程+5 大玩法赔率)+ api-football(赛果)
-- 竞彩足球：内置 130+ 条中英队名映射，自动回填比分到已抓取的中文赛程
-- API-Football Key 自服务配置：用户可在「数据源设置」(/settings) 自配 key
-- API-Football Key 全局配置：管理员可在「后台管理」(/admin) 配置全局 key
-- API-Football Key 内置发布：维护者 `API_FOOTBALL_KEY=xxx make release` 注入，NAS 用户零配置开箱即用
+- 竞彩足球：数据源切换为 sporttery 官方 + api-football
+- 竞彩足球：内置 130+ 条中英队名映射
+- API-Football Key 自服务/全局/内置三级配置
 
 **Bug 修复**
-- 修复：第三方 huiniao.top 接口失效导致「抓取赛程」/「获取结果」全部失败
-- 修复：空数据源时红色错误提示改为蓝色 info 提示 + 引导用户去设置
-- 修复：Docker 镜像(基于 scratch)抓取赛程失败 — sporttery 中间 CA 缺失导致 x509 验证失败
+- 修复：第三方接口失效导致抓取失败
+- 修复：Docker 镜像抓取赛程失败 (TLS 问题)
 
 ### v1.1.2 (2026-03-20)
 
 **改进**
-- 定时抓取：启动后立即执行一次，不再等待至凌晨 2 点
-- 定时抓取：新增早 6:00 / 中午 12:00 / 晚 21:30 多时段自动抓取
-
-**Bug 修复**
-- 修复定时器实例双份问题，确保手动触发与自动定时共用同一实例
-- 修复并发抓取可能导致的重复请求问题
+- 定时抓取：启动后立即执行，新增多时段自动抓取
 
 ### v1.1.1 (2026-03-15)
 
 **Bug 修复**
-- 修复：双色球输入两位数时重复校验误触导致输入被清除
+- 修复：双色球输入两位数时重复校验误触
 
 ### v1.1.0 (2026-03-10)
 
 **新功能**
-- 竞彩足球：完整的足球赛事管理、投注、开奖结果抓取、盈亏概览
-- 定时抓取：每日凌晨 2:00 自动从 API 抓取最新开奖号码，抓取后自动计算中奖
-- 手动触发抓取：可在管理页面随时触发
+- 竞彩足球：完整的赛事管理、投注、开奖、盈亏概览
+- 定时抓取：每日凌晨自动抓取开奖号码
 
 **Bug 修复**
-- 大乐透奖金表：按 2023 年后规则修正 8 个奖级（0+2 从 15 元→5 元等）
-- 七乐彩奖金表：修正 4 项金额（四等奖 100→200、五等奖 100→50、六等奖 30→10、七等奖 30→5），删除无效的 3+1 奖项
-- 排列3：直选 1000→1040 元；组选拆分为组选3（346 元）和组选6（173 元）
-- 福彩3D：支持重复号码（如 112）的正确组选计算
-- 复式投注：修复复式投注中奖计算逻辑
+- 修正大乐透、七乐彩、排列3 奖金表
+- 修复复式投注中奖计算逻辑
 
-## License
+## 开源协议
 
-MIT
+MIT License
+
+## 项目地址
+
+- GitHub: https://github.com/TechFunWay/lottery
+- Gitee: https://gitee.com/TechFunWay/lottery
+- 飞牛应用: http://techfunway.wycto.cn/fnapp/lottery/
