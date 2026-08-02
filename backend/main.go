@@ -351,6 +351,10 @@ func main() {
 			})
 		}
 	})
+	r.GET("/manifest.webmanifest", func(c *gin.Context) {
+		c.Header("Content-Type", "application/manifest+json")
+		c.File(filepath.Join(webRoot, "manifest.webmanifest"))
+	})
 
 	// 静态资源路由（lottery-web 目录）
 	if _, err := os.Stat(webStaticDir); err == nil {
@@ -366,6 +370,10 @@ func main() {
 		r.Static("/img", webImgDir)
 		sugarLogger.Infof("✅ Images served from %s", webImgDir)
 	}
+	if _, err := os.Stat(filepath.Join(webRoot, "icons")); err == nil {
+		r.Static("/icons", filepath.Join(webRoot, "icons"))
+	}
+	r.StaticFile("/favicon.png", filepath.Join(webRoot, "favicon.png"))
 
 	// NoRoute 处理 SPA 路由，所有非 API 请求都返回 index.html
 	r.NoRoute(func(c *gin.Context) {

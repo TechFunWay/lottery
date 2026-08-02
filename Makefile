@@ -85,6 +85,11 @@ copy-frontend:
 	@if [ -d "$(FRONTEND_DIR)/dist" ]; then \
 		echo -e "$(BLUE)📁 复制前端文件到项目根目录...$(NC)"; \
 		cp -f "$(FRONTEND_DIR)/dist/index.html" "$(DEVELOP_DIR)/index.html"; \
+		cp -f "$(FRONTEND_DIR)/dist/manifest.webmanifest" "$(DEVELOP_DIR)/manifest.webmanifest"; \
+		if [ -d "$(FRONTEND_DIR)/dist/icons" ]; then \
+			rm -rf "$(DEVELOP_DIR)/icons"; \
+			cp -r "$(FRONTEND_DIR)/dist/icons" "$(DEVELOP_DIR)/"; \
+		fi; \
 		if [ -d "$(FRONTEND_DIR)/dist/lottery-web" ]; then \
 			rm -rf "./lottery-web"; \
 			cp -r "$(FRONTEND_DIR)/dist/lottery-web" "$(DEVELOP_DIR)/"; \
