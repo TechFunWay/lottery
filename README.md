@@ -2,7 +2,7 @@
 
 一个帮助您记录彩票购买、自动识别中奖情况、并提供全面统计分析的系统。
 
-> **当前版本**: v1.3.0 | **开源协议**: MIT
+> **当前版本**: v1.3.1 | **开源协议**: MIT
 
 **注意**: 本应用包含匿名使用统计功能，会收集设备标识码用于统计独立设备数量。详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
 
@@ -36,6 +36,20 @@
 - **多用户支持**：用户注册、登录、权限管理
 - **数据隔离**：每个用户只能访问自己的数据
 - **管理员功能**：用户管理、全局配置、系统升级
+
+## 界面预览
+
+| 仪表盘 | 购买记录 |
+| --- | --- |
+| ![仪表盘](docs/screenshots/v1.3.1/dashboard.png) | ![购买记录](docs/screenshots/v1.3.1/purchases.png) |
+
+| 统计分析 | 竞彩足球 |
+| --- | --- |
+| ![统计分析](docs/screenshots/v1.3.1/statistics.png) | ![竞彩足球](docs/screenshots/v1.3.1/football.png) |
+
+### 足球投注记录
+
+![足球投注记录](docs/screenshots/v1.3.1/football-bets.png)
 
 ## 技术栈
 
@@ -141,7 +155,7 @@ docker run -d \
 
 ```bash
 # 固定版本
-docker-compose -f docker-compose-v1.3.0.yml up -d
+docker-compose -f docker-compose-v1.3.1.yml up -d
 
 # 自动更新版（含 watchtower）
 docker-compose -f docker-compose-latest.yml up -d
@@ -232,15 +246,15 @@ make release
 ### 输出目录
 
 ```
-release/v1.3.0/
-├── lottery-assistant-v1.3.0-darwin-amd64/
-├── lottery-assistant-v1.3.0-darwin-arm64/
-├── lottery-assistant-v1.3.0-linux-amd64/
-├── lottery-assistant-v1.3.0-linux-arm64/
-├── lottery-assistant-v1.3.0-windows-amd64/
-├── lottery-assistant-v1.3.0-windows-arm64/
-├── techfunway-lottery-v1.3.0-arm.fpk
-└── techfunway-lottery-v1.3.0-x86.fpk
+release/v1.3.1/
+├── lottery-assistant-v1.3.1-darwin-amd64/
+├── lottery-assistant-v1.3.1-darwin-arm64/
+├── lottery-assistant-v1.3.1-linux-amd64/
+├── lottery-assistant-v1.3.1-linux-arm64/
+├── lottery-assistant-v1.3.1-windows-amd64/
+├── lottery-assistant-v1.3.1-windows-arm64/
+├── techfunway-lottery-v1.3.1-arm.fpk
+└── techfunway-lottery-v1.3.1-x86.fpk
 ```
 
 ### Docker 镜像
@@ -250,7 +264,7 @@ release/v1.3.0/
 bash .skill/docker-builder/scripts/docker_builder.sh
 
 # 输出
-techfunways/lottery:v1.3.0
+techfunways/lottery:v1.3.1
 techfunways/lottery:latest
 ```
 
@@ -271,6 +285,18 @@ grep ERROR data/logs/app.log
 ```
 
 ## 版本更新日志
+
+### v1.3.1 (2026-08-07)
+
+**改进**
+- 补充移动端网页快捷方式图标
+- API-Football 配置状态按当前用户实际生效的 Key 显示
+
+**Bug 修复**
+- 修复 API-Football 返回业务错误时被误判为“暂无结果”的问题
+- 修复隔天补抓时，已标记为“已完赛”但没有比分的比赛无法回填赛果
+- 修复竞彩足球同场多选被错误按全部命中计算，导致复式二串一误判未中奖
+- 修复“重新检查”仅处理待开奖记录，历史误判记录无法自动纠正
 
 ### v1.3.0 (2026-07-07)
 
