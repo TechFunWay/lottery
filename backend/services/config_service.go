@@ -1,10 +1,11 @@
 package services
 
 import (
-	"lottery-backend/database"
-	"lottery-backend/models"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"lottery-backend/database"
+	"lottery-backend/models"
 	"net/http"
 	"os"
 	"strings"
@@ -121,7 +122,7 @@ func MaskAPIFootballKey(key string) string {
 	return k[:4] + strings.Repeat("*", len(k)-8) + k[len(k)-4:]
 }
 
-// TestAPIFootballKey 打一次 /timezone 验 key,200 即通过。
+// TestAPIFootballKey 打一次 /timezone 验 key，同时检查 HTTP 状态和响应体 errors。
 func TestAPIFootballKey(key string) error {
 	k := strings.TrimSpace(key)
 	if k == "" {
@@ -140,6 +141,15 @@ func TestAPIFootballKey(key string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d(可能 key 无效或被限流)", resp.StatusCode)
+	}
+	var result struct {
+		Errors json.RawMessage `json:"errors"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("解析 API-Football 响应失败: %w", err)
+	}
+	if err := apiFootballError(result.Errors); err != nil {
+		return err
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"lottery-backend/database"
+	"lottery-backend/models"
 	"os"
 	"strings"
 	"testing"
@@ -166,6 +167,49 @@ func TestAPIFootballFixtures_Unmarshal(t *testing.T) {
 	}
 	if ns.Goals.Home != nil {
 		t.Errorf("expected home goals=nil for NS match, got %v", *ns.Goals.Home)
+	}
+}
+
+func TestAPIFootballError(t *testing.T) {
+	for _, raw := range []string{"", "null", "[]", "{}"} {
+		if err := apiFootballError(json.RawMessage(raw)); err != nil {
+			t.Errorf("空错误响应 %q 不应报错: %v", raw, err)
+		}
+	}
+
+	err := apiFootballError(json.RawMessage(`{"token":"Error/Missing application key"}`))
+	if err == nil || !strings.Contains(err.Error(), "Missing application key") {
+		t.Fatalf("API 业务错误应原样返回给用户，得到 %v", err)
+	}
+}
+
+func TestCheckBetWinning_CorrectsPreviouslyLostMultipleBet(t *testing.T) {
+	selections := []models.FootballSelection{
+		{MatchID: "周一001", PlayType: models.PlayWinDrawLoss, Selection: "3", Odds: 1.80},
+		{MatchID: "周一001", PlayType: models.PlayWinDrawLoss, Selection: "1", Odds: 3.20},
+		{MatchID: "周一002", PlayType: models.PlayWinDrawLoss, Selection: "1", Odds: 3.00},
+		{MatchID: "周一002", PlayType: models.PlayWinDrawLoss, Selection: "0", Odds: 2.80},
+	}
+	encoded, err := json.Marshal(selections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bet := &models.FootballBet{
+		Status:     models.BetLost,
+		Multiple:   1,
+		Selections: string(encoded),
+	}
+	matches := []models.FootballMatch{
+		{MatchID: "周一001", Status: models.MatchFinished, HomeScore: 2, AwayScore: 1},
+		{MatchID: "周一002", Status: models.MatchFinished, HomeScore: 0, AwayScore: 0},
+	}
+
+	(&FootballService{}).CheckBetWinning(bet, matches)
+	if bet.Status != models.BetWon {
+		t.Fatalf("历史误判记录重新检查后应纠正为已中奖，得到 %s", bet.Status)
+	}
+	if bet.WinAmount != 10.8 {
+		t.Fatalf("预期奖金 1.80 * 3.00 * 2 = 10.80，得到 %v", bet.WinAmount)
 	}
 }
 
