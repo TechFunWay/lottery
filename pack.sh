@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# 全自动打包前端、go、飞牛nas，直接调用他们的skill
+# 全自动打包前端、Go、飞牛 NAS
 
-.skill/frontend-build/scripts/build.sh
-.skill/cross-platform-compile/scripts/compile.sh
-.skill/fnnas-packager/scripts/package-multiplatform.sh
+scripts/frontend-build.sh
+scripts/cross-platform-compile.sh
+scripts/package-multiplatform.sh

@@ -126,11 +126,11 @@ lottery/
 ├── Dockerfile                  # Docker 开发镜像 (多阶段构建)
 ├── Dockerfile.release          # Docker 发布镜像 (基于 scratch)
 ├── Makefile                    # 构建脚本
-└── .skill/                     # 自动化脚本
-    ├── cross-platform-compile/ # 跨平台编译
-    ├── fnnas-packager/         # 飞牛打包
-    ├── frontend-build/         # 前端构建
-    └── docker-builder/         # Docker 构建
+└── scripts/                    # 构建与发布脚本
+    ├── cross-platform-compile.sh
+    ├── package-multiplatform.sh
+    ├── frontend-build.sh
+    └── docker-builder.sh
 ```
 
 ## 快速开始
@@ -261,7 +261,7 @@ release/v1.3.1/
 
 ```bash
 # 构建多架构镜像
-bash .skill/docker-builder/scripts/docker_builder.sh
+bash scripts/docker_builder.sh
 
 # 输出
 techfunways/lottery:v1.3.1
