@@ -6,6 +6,18 @@
 
 **注意**: 本应用包含匿名使用统计功能，会收集设备标识码用于统计独立设备数量。详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
 
+## 下载与安装
+
+| 渠道 | 获取方式 |
+|---|---|
+| GitHub Releases | <https://github.com/TechFunWay/lottery/releases> —— 各平台压缩包、飞牛 `fpk` 安装包与 `docker-compose.yml` |
+| Gitee 镜像 | <https://gitee.com/TechFunWay/lottery> —— 代码自动同步自 GitHub，发行版待补 |
+| Docker 镜像 | `docker pull techfunways/lottery:latest`（amd64 / arm64 多平台） |
+| 飞牛 fnOS | 在飞牛应用中心手动安装 Releases 里的 `.fpk` 安装包（amd64 / arm64） |
+| 官网介绍页 | <https://techfunway.wycto.cn/fnapp/lottery> |
+
+> 默认端口 `8902`；数据默认是挂载目录下的 SQLite 单文件，备份即拷贝，恢复支持上传本地备份文件。
+
 ## 功能特性
 
 ### 彩票管理
