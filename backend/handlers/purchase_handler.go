@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"lottery-backend/models"
 	"lottery-backend/services"
@@ -27,18 +28,21 @@ type CreatePurchaseRequest struct {
 	Remark       string  `json:"remark"`
 }
 
-// CreatePurchase POST /api/purchases
-func CreatePurchase(c *gin.Context) {
-	var req CreatePurchaseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
+// buildPurchaseRecords 校验并构建一条请求对应的购买记录；periods>1 时按期号递增展开为多条。
+// 返回错误信息为空串表示校验通过。
+func buildPurchaseRecords(userID uint, req CreatePurchaseRequest) ([]*models.PurchaseRecord, string) {
 	purchaseDate, err := time.Parse("2006-01-02", req.PurchaseDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "日期格式错误，请使用 YYYY-MM-DD"})
-		return
+		return nil, "日期格式错误，请使用 YYYY-MM-DD"
+	}
+	if !json.Valid([]byte(req.Numbers)) {
+		return nil, "号码格式错误"
+	}
+	if req.Amount <= 0 {
+		return nil, "金额必须大于 0"
+	}
+	if req.LotteryType == "" {
+		return nil, "彩票类型不能为空"
 	}
 
 	betType := models.BetType(req.BetType)
@@ -63,36 +67,7 @@ func CreatePurchase(c *gin.Context) {
 		periods = 10
 	}
 
-	// 获取当前用户ID
-	userID, _ := c.Get("user_id")
-
-	// 单期投注
-	if periods == 1 {
-		purchase := &models.PurchaseRecord{
-			UserID:       userID.(uint),
-			LotteryType:  models.LotteryType(req.LotteryType),
-			IssueNumber:  req.IssueNumber,
-			PurchaseDate: purchaseDate,
-			Numbers:      req.Numbers,
-			BetType:      betType,
-			Amount:       req.Amount,
-			Multiple:     multiple,
-			Append:       req.Append,
-			Periods:      1,
-			Remark:       req.Remark,
-			Status:       "待开奖",
-		}
-
-		if err := purchaseService.CreatePurchase(purchase); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建记录失败: " + err.Error()})
-			return
-		}
-		c.JSON(http.StatusCreated, gin.H{"data": purchase, "message": "创建成功"})
-		return
-	}
-
-	// 多期投注：拆分为多条记录，期号递增
-	var createdRecords []models.PurchaseRecord
+	records := make([]*models.PurchaseRecord, 0, periods)
 	for i := 0; i < periods; i++ {
 		issueNum := req.IssueNumber
 		if i > 0 {
@@ -101,8 +76,8 @@ func CreatePurchase(c *gin.Context) {
 				issueNum = fmt.Sprintf("%d", n+i)
 			}
 		}
-		purchase := &models.PurchaseRecord{
-			UserID:       userID.(uint),
+		records = append(records, &models.PurchaseRecord{
+			UserID:       userID,
 			LotteryType:  models.LotteryType(req.LotteryType),
 			IssueNumber:  issueNum,
 			PurchaseDate: purchaseDate,
@@ -114,15 +89,98 @@ func CreatePurchase(c *gin.Context) {
 			Periods:      periods,
 			Remark:       req.Remark,
 			Status:       "待开奖",
-		}
-		if err := purchaseService.CreatePurchase(purchase); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建多期记录失败: " + err.Error()})
-			return
-		}
-		createdRecords = append(createdRecords, *purchase)
+		})
+	}
+	return records, ""
+}
+
+// CreatePurchase POST /api/purchases
+func CreatePurchase(c *gin.Context) {
+	var req CreatePurchaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": createdRecords, "message": "创建成功，共 " + strconv.Itoa(periods) + " 期"})
+	userID, _ := c.Get("user_id")
+
+	records, errMsg := buildPurchaseRecords(userID.(uint), req)
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+
+	if len(records) == 1 {
+		if err := purchaseService.CreatePurchase(records[0]); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建记录失败: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"data": records[0], "message": "创建成功"})
+		return
+	}
+
+	// 多期投注
+	if err := purchaseService.CreatePurchasesBatch(records); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建多期记录失败: " + err.Error()})
+		return
+	}
+
+	created := make([]models.PurchaseRecord, 0, len(records))
+	for _, r := range records {
+		created = append(created, *r)
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": created, "message": "创建成功，共 " + strconv.Itoa(len(records)) + " 期"})
+}
+
+// 单次批量导入的上限：条目数与展开后期数后的总记录数
+const (
+	batchMaxItems   = 100
+	batchMaxRecords = 500
+)
+
+type BatchPurchaseRequest struct {
+	Items []CreatePurchaseRequest `json:"items" binding:"required,min=1"`
+}
+
+// CreatePurchaseBatch POST /api/purchases/batch
+// 一次导入多注号码，每条支持 periods 多期展开，整体在一个事务内落库。
+func CreatePurchaseBatch(c *gin.Context) {
+	var req BatchPurchaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Items) > batchMaxItems {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("单次最多导入 %d 条记录", batchMaxItems)})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+
+	records := make([]*models.PurchaseRecord, 0, len(req.Items))
+	for i, item := range req.Items {
+		itemRecords, errMsg := buildPurchaseRecords(userID.(uint), item)
+		if errMsg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("第 %d 条：%s", i+1, errMsg)})
+			return
+		}
+		records = append(records, itemRecords...)
+	}
+	if len(records) > batchMaxRecords {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("展开后期数后共 %d 条，超过单次上限 %d 条", len(records), batchMaxRecords)})
+		return
+	}
+
+	if err := purchaseService.CreatePurchasesBatch(records); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "批量创建记录失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data":    records,
+		"total":   len(records),
+		"message": "导入成功，共 " + strconv.Itoa(len(records)) + " 条",
+	})
 }
 
 // GetPurchases GET /api/purchases

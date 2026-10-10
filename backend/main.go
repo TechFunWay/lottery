@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"lottery-backend/database"
+	"lottery-backend/fnos"
 	"lottery-backend/handlers"
 	"lottery-backend/logger"
 	"lottery-backend/middleware"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,10 +25,13 @@ import (
 
 // 版本信息（编译时注入）
 var (
-	Version   = "v1.3.1"
+	Version   = "v1.5.0"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
+
+// processStartedAt 进程启动时间，用于前端区分「本次运行」与「重启后」
+var processStartedAt = time.Now()
 
 // 命令行参数
 var (
@@ -36,6 +41,9 @@ var (
 	deviceTypeFlag   = flag.String("device-type", "", "Device type for usage stats (e.g., fnos, docker)")
 	showVersion      = flag.Bool("version", false, "Show version information")
 	resetAdminPasswd = flag.String("reset-admin-password", "", "Reset admin password (requires db-path or data-dir)")
+	fnOSApp          = flag.Bool("fnos-app", false, "Run with fnOS unified gateway identity support")
+	gatewaySocket    = flag.String("gateway-socket", "", "fnOS unified gateway Unix socket path")
+	gatewayPrefix    = flag.String("gateway-prefix", "/app/techfunway-lottery", "fnOS unified gateway URL prefix")
 )
 
 // 配置信息
@@ -44,6 +52,7 @@ var config struct {
 	webRoot string
 	port    string
 	dbPath  string
+	fnos    fnos.Config
 }
 
 func printVersion() {
@@ -66,6 +75,9 @@ func printHelp() {
 	fmt.Println("  -port string                Server port (default: 8902)")
 	fmt.Println("  -device-type string         Device type for usage stats (e.g., fnos, docker)")
 	fmt.Println("  -reset-admin-password string  Reset admin password")
+	fmt.Println("  -fnos-app                   Enable fnOS unified gateway login")
+	fmt.Println("  -gateway-socket string      fnOS gateway Unix socket path")
+	fmt.Println("  -gateway-prefix string      fnOS gateway URL prefix")
 	fmt.Println("  -version                    Show version information")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
@@ -98,6 +110,14 @@ func main() {
 	config.dataDir = *dataDirFlag
 	config.webRoot = *webDirFlag
 	config.port = *portFlag
+	config.fnos = fnos.Config{Enabled: *fnOSApp, Socket: *gatewaySocket, Prefix: *gatewayPrefix}
+
+	if config.fnos.Enabled {
+		middleware.SetGatewayPrefix(config.fnos.Prefix)
+		// 网关注入的 X-Trim-* 身份只在 unix socket 连接上可信，把判定函数交给
+		// 认证中间件做「网关域隐式认人」兜底（TCP 直连可伪造同名头，不能认）。
+		middleware.SetGatewayDetector(fnos.IsGatewayRequest)
+	}
 
 	// 优先级：环境变量 > 命令行参数 > 默认值
 	if envPort := os.Getenv("PORT"); envPort != "" {
@@ -156,7 +176,12 @@ func main() {
 	usageStatsSvc := services.NewUsageStatsService(Version)
 	usageStatsSvc.SetAppName("lottery")
 	usageStatsSvc.SetDeviceType(*deviceTypeFlag)
-	usageStatsSvc.SetAPIURL("http://techfunway.wycto.cn/api/apps.online/refresh")
+	// 统计上报地址：可用 STATS_ENDPOINT 环境变量覆盖（用于本地测试）
+	statsAPI := os.Getenv("STATS_ENDPOINT")
+	if statsAPI == "" {
+		statsAPI = "https://techfunway.wycto.cn/api/apps.online/refresh"
+	}
+	usageStatsSvc.SetAPIURL(statsAPI)
 
 	// 初始化设备标识码
 	if err := usageStatsSvc.InitDeviceID(config.dataDir); err != nil {
@@ -215,8 +240,35 @@ func main() {
 		AllowCredentials: corsOrigins[0] != "*",
 	}))
 
+	// 静态资源禁缓存：升级期间 SPA 兜底曾把 index.html 短暂回给 JS/CSS URL，
+	// 一旦被浏览器缓存，后续加载会一直拿到假 JS 导致白屏。入口 HTML 必须每次
+	// 回源校验，静态资源按内容指纹（hash 文件名）缓存。
+	r.Use(func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache")
+		c.Next()
+	})
+
+	// fnOS packages live below a stable unified-gateway prefix. Normal and
+	// Docker deployments keep the existing root paths.
+	appGroup := r.Group("")
+	if config.fnos.Enabled {
+		appGroup = r.Group(strings.TrimSuffix(config.fnos.Prefix, "/"))
+	}
+
+	// 飞牛授权登录跳板页：网关域访问时签发一次性票据后跳回直连端口；
+	// __APP_PORT__ 运行时替换为实际服务端口
+	appGroup.GET("/fnos-entry.html", func(c *gin.Context) {
+		data, err := os.ReadFile(filepath.Join(config.webRoot, "fnos-entry.html"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "页面不存在"})
+			return
+		}
+		page := strings.ReplaceAll(string(data), "__APP_PORT__", config.port)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(page))
+	})
+
 	// API 路由
-	api := r.Group("/api")
+	api := appGroup.Group("/api")
 	{
 		// 版本信息接口（公开）
 		// 传递版本信息给处理函数
@@ -226,6 +278,7 @@ func main() {
 				"version":   Version,
 				"buildTime": BuildTime,
 				"gitCommit": GitCommit,
+				"startedAt": processStartedAt.Format(time.RFC3339),
 				"status":    "running",
 			})
 		})
@@ -237,6 +290,12 @@ func main() {
 			auth.POST("/register", handlers.Register)
 			auth.POST("/login", handlers.Login)
 			auth.GET("/check-admin", handlers.CheckAdmin)
+			// 退出登录：网关域上必须落持久化抑制标记，故放在公开组里自行认人
+			// （认不出来也要把会话 cookie 清掉，不能因为过期就退不出去）。
+			auth.POST("/logout", handlers.Logout)
+			if config.fnos.Enabled {
+				fnos.RegisterRoutes(auth.Group("/fnos"), database.DB)
+			}
 		}
 
 		// 公开配置（不需要登录）
@@ -247,6 +306,15 @@ func main() {
 		authorized := api.Group("")
 		authorized.Use(middleware.AuthMiddleware())
 		{
+			// 赞赏支持计数（匿名设备统计，仅设备级信息，不含用户数据）
+			authorized.POST("/donate/support", func(c *gin.Context) {
+				if !usageStatsSvc.SendEvent("donate_support") {
+					c.JSON(http.StatusBadGateway, gin.H{"error": "支持计数发送失败，请稍后再试"})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"ok": true})
+			})
+
 			// 用户信息
 			authorized.GET("/auth/me", handlers.GetCurrentUser)
 			authorized.PUT("/auth/password", handlers.ChangePassword)
@@ -270,6 +338,7 @@ func main() {
 
 			// 购买记录
 			authorized.POST("/purchases", handlers.CreatePurchase)
+			authorized.POST("/purchases/batch", handlers.CreatePurchaseBatch)
 			authorized.GET("/purchases", handlers.GetPurchases)
 			authorized.PUT("/purchases/:id", handlers.UpdatePurchase)
 			authorized.DELETE("/purchases/:id", handlers.DeletePurchase)
@@ -341,7 +410,7 @@ func main() {
 	}
 
 	// 根路径返回 index.html
-	r.GET("/", func(c *gin.Context) {
+	appGroup.GET("/", func(c *gin.Context) {
 		if _, err := os.Stat(indexPath); err == nil {
 			c.File(indexPath)
 		} else {
@@ -351,14 +420,14 @@ func main() {
 			})
 		}
 	})
-	r.GET("/manifest.webmanifest", func(c *gin.Context) {
+	appGroup.GET("/manifest.webmanifest", func(c *gin.Context) {
 		c.Header("Content-Type", "application/manifest+json")
 		c.File(filepath.Join(webRoot, "manifest.webmanifest"))
 	})
 
 	// 静态资源路由（lottery-web 目录）
 	if _, err := os.Stat(webStaticDir); err == nil {
-		r.Static("/lottery-web", webStaticDir)
+		appGroup.Static("/lottery-web", webStaticDir)
 		sugarLogger.Infof("✅ Static resources served from %s", webStaticDir)
 	} else {
 		sugarLogger.Warnf("⚠️  Static resources directory not found: %s", webStaticDir)
@@ -367,19 +436,27 @@ func main() {
 	// 图片资源路由（img 目录）
 	webImgDir := filepath.Join(webRoot, "img")
 	if _, err := os.Stat(webImgDir); err == nil {
-		r.Static("/img", webImgDir)
+		appGroup.Static("/img", webImgDir)
 		sugarLogger.Infof("✅ Images served from %s", webImgDir)
 	}
 	if _, err := os.Stat(filepath.Join(webRoot, "icons")); err == nil {
-		r.Static("/icons", filepath.Join(webRoot, "icons"))
+		appGroup.Static("/icons", filepath.Join(webRoot, "icons"))
 	}
-	r.StaticFile("/favicon.png", filepath.Join(webRoot, "favicon.png"))
+	appGroup.StaticFile("/favicon.png", filepath.Join(webRoot, "favicon.png"))
 
 	// NoRoute 处理 SPA 路由，所有非 API 请求都返回 index.html
 	r.NoRoute(func(c *gin.Context) {
 		// 如果请求的是 API 路径，返回 404
-		if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
+		apiPrefix := "/api"
+		if config.fnos.Enabled {
+			apiPrefix = strings.TrimSuffix(config.fnos.Prefix, "/") + "/api"
+		}
+		if strings.HasPrefix(c.Request.URL.Path, apiPrefix) {
 			c.JSON(404, gin.H{"error": "API endpoint not found"})
+			return
+		}
+		if config.fnos.Enabled && c.Request.URL.Path != strings.TrimSuffix(config.fnos.Prefix, "/") && !strings.HasPrefix(c.Request.URL.Path, strings.TrimSuffix(config.fnos.Prefix, "/")+"/") {
+			c.Status(http.StatusNotFound)
 			return
 		}
 
@@ -397,19 +474,38 @@ func main() {
 	sugarLogger.Infof("🌐 Server starting on port %s", config.port)
 	sugarLogger.Infof("📌 API endpoint: http://localhost:%s/api", config.port)
 
-	// 创建 HTTP 服务器
-	srv := &http.Server{
-		Addr:    ":" + config.port,
-		Handler: r,
+	listeners, err := fnos.Listen(":"+config.port, config.fnos)
+	if err != nil {
+		sugarLogger.Fatalf("Server listen failed: %v", err)
+	}
+	for _, listener := range listeners {
+		defer listener.Close()
+	}
+	if config.fnos.Enabled {
+		defer os.Remove(config.fnos.Socket)
 	}
 
-	// 在 goroutine 中启动服务器
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			sugarLogger.Errorf("Server error: %v", err)
-			os.Exit(1)
+	servers := make([]*http.Server, 0, len(listeners))
+	for _, listener := range listeners {
+		handler := http.Handler(r)
+		if config.fnos.Enabled && !listener.TrustedGateway {
+			gatewayURL := strings.TrimSuffix(config.fnos.Prefix, "/") + "/"
+			handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.URL.Path == "/" {
+					http.Redirect(w, req, gatewayURL, http.StatusTemporaryRedirect)
+					return
+				}
+				r.ServeHTTP(w, req)
+			})
 		}
-	}()
+		srv := fnos.NewHTTPServer(handler, listener.TrustedGateway)
+		servers = append(servers, srv)
+		go func(server *http.Server, listener fnos.Listener) {
+			if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+				sugarLogger.Errorf("Server error: %v", err)
+			}
+		}(srv, listener)
+	}
 
 	// 等待中断信号以优雅关闭服务器
 	quit := make(chan os.Signal, 1)
@@ -422,8 +518,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		sugarLogger.Errorf("Server forced to shutdown: %v", err)
+	for _, srv := range servers {
+		if err := srv.Shutdown(ctx); err != nil {
+			sugarLogger.Errorf("Server forced to shutdown: %v", err)
+		}
 	}
 
 	sugarLogger.Info("✅ Server exited")

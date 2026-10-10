@@ -54,7 +54,7 @@ type DrawResult struct {
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
-	LotteryType LotteryType `json:"lottery_type" gorm:"not null"`
+	LotteryType LotteryType `json:"lottery_type" gorm:"not null;uniqueIndex:idx_lottery_issue"`
 	IssueNumber string      `json:"issue_number" gorm:"not null;uniqueIndex:idx_lottery_issue"`
 	DrawDate    time.Time   `json:"draw_date" gorm:"not null"`
 	Numbers     string      `json:"numbers" gorm:"not null"` // JSON 格式存储开奖号码

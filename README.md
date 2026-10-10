@@ -6,6 +6,18 @@
 
 **注意**: 本应用包含匿名使用统计功能，会收集设备标识码用于统计独立设备数量。详情请查看 [PRIVACY_POLICY.md](PRIVACY_POLICY.md)。
 
+## 下载与安装
+
+| 渠道 | 获取方式 |
+|---|---|
+| GitHub Releases | <https://github.com/TechFunWay/lottery/releases> —— 各平台压缩包、飞牛 `fpk` 安装包与 `docker-compose.yml` |
+| Gitee 镜像 | <https://gitee.com/TechFunWay/lottery> —— 代码自动同步自 GitHub，发行版待补 |
+| Docker 镜像 | `docker pull techfunways/lottery:latest`（amd64 / arm64 多平台） |
+| 飞牛 fnOS | 在飞牛应用中心手动安装 Releases 里的 `.fpk` 安装包（amd64 / arm64） |
+| 官网介绍页 | <https://techfunway.wycto.cn/fnapp/lottery> |
+
+> 默认端口 `8902`；数据默认是挂载目录下的 SQLite 单文件，备份即拷贝，恢复支持上传本地备份文件。
+
 ## 功能特性
 
 ### 彩票管理
@@ -286,6 +298,18 @@ grep ERROR data/logs/app.log
 
 ## 版本更新日志
 
+### v1.4.0 (2026-09-06)
+
+**新功能**
+- 飞牛 NAS：接入飞牛统一网关登录，在 NAS 桌面打开应用可使用飞牛账号一键登录，首次登录可绑定或注册应用账号
+
+**改进**
+- 全新 3D 玻璃质感应用图标（品牌蓝主题）
+
+**Bug 修复**
+- 修复账号下拉菜单交互问题
+- 修复修改密码后旧登录态仍可访问的安全问题，密码变更后其他会话需重新登录
+
 ### v1.3.1 (2026-08-07)
 
 **改进**
@@ -356,3 +380,13 @@ MIT License
 - GitHub: https://github.com/TechFunWay/lottery
 - Gitee: https://gitee.com/TechFunWay/lottery
 - 飞牛应用: http://techfunway.wycto.cn/fnapp/lottery/
+
+## 支持作者
+
+如果彩彩助手帮到了你，欢迎微信扫码请作者喝杯咖啡——金额随意，1 元也是心意：
+
+<p align="center">
+  <img src="frontend/public/img/wechat-qr.png" alt="微信收款码" width="240" />
+</p>
+
+应用内的赞赏入口（启动弹窗、顶部横幅、支持按钮）随时可用；支持记录按版本号记忆，升级到新版本后会再次提醒。支持完全自愿，不支付不影响任何功能。

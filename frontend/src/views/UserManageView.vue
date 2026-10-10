@@ -57,8 +57,40 @@ const toggleUserStatus = async (user: User) => {
   }
 }
 
+// 通用确认弹窗（替代原生 confirm）：确认后执行 confirmAction
+const confirmState = ref<{
+  show: boolean
+  title: string
+  message: string
+  danger: boolean
+  action: (() => void | Promise<void>) | null
+}>({ show: false, title: '', message: '', danger: false, action: null })
+
+const requestConfirm = (title: string, message: string, action: () => void | Promise<void>, danger = true) => {
+  confirmState.value = { show: true, title, message, danger, action }
+}
+
+const confirmCancel = () => {
+  confirmState.value.show = false
+  confirmState.value.action = null
+}
+
+const confirmOk = async () => {
+  const action = confirmState.value.action
+  confirmState.value.show = false
+  confirmState.value.action = null
+  if (action) await action()
+}
+
 const deleteUser = async (user: User) => {
-  if (!confirm(`确定要删除用户 "${user.username}" 吗？此操作不可恢复。`)) return
+  requestConfirm(
+    '删除用户',
+    `确定要删除用户 "${user.username}" 吗？此操作不可恢复。`,
+    () => doDeleteUser(user)
+  )
+}
+
+const doDeleteUser = async (user: User) => {
   deleting.value = user.id
   userError.value = ''
   userSuccess.value = ''
@@ -241,8 +273,15 @@ const testGlobalKey = async () => {
   }
 }
 
-const clearGlobalKey = async () => {
-  if (!confirm('确定要清除全局 Key 吗?清除后仅自配用户的 Key 仍可工作。')) return
+const clearGlobalKey = () => {
+  requestConfirm(
+    '清除全局 Key',
+    '确定要清除全局 Key 吗？清除后仅自配用户的 Key 仍可工作。',
+    () => doClearGlobalKey()
+  )
+}
+
+const doClearGlobalKey = async () => {
   globalKeyClearing.value = true
   try {
     const res = await footballConfigApi.setGlobalKey('')
@@ -719,4 +758,36 @@ onMounted(() => {
       </div>
     </div>
   </transition>
+
+  <!-- 通用确认弹窗（替代原生 confirm） -->
+  <div v-if="confirmState.show" class="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="confirmCancel"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-slide-up">
+      <div class="p-6 text-center">
+        <div
+          class="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
+          :class="confirmState.danger ? 'bg-red-100' : 'bg-amber-100'"
+        >
+          <AlertCircle class="w-6 h-6" :class="confirmState.danger ? 'text-red-500' : 'text-amber-500'" />
+        </div>
+        <h3 class="text-lg font-semibold text-slate-800 mb-2">{{ confirmState.title }}</h3>
+        <p class="text-slate-600 text-sm">{{ confirmState.message }}</p>
+      </div>
+      <div class="border-t border-slate-100 px-6 py-4 flex gap-3">
+        <button
+          @click="confirmCancel"
+          class="flex-1 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer"
+        >
+          取消
+        </button>
+        <button
+          @click="confirmOk"
+          class="flex-1 px-4 py-2 text-white rounded-xl font-medium transition-colors cursor-pointer"
+          :class="confirmState.danger ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600'"
+        >
+          确认
+        </button>
+      </div>
+    </div>
+  </div>
 </template>

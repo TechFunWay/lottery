@@ -83,3 +83,12 @@ techfunway-lottery/app/cmd/
 techfunway-lottery/app/wizard/
 techfunway-lottery/techfunway-lottery.fpk
 *.fpk
+
+# ---------- 本地临时目录 ----------
+# 临时测试与调试文件统一放这里，目录内内容不入库（仅保留 .gitkeep 占位）
+tmp/*
+!tmp/.gitkeep
+
+# AI 工具本地目录
+.zcode/
+.mimocode/

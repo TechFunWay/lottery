@@ -12,7 +12,7 @@ const getBaseURL = () => {
 
   // 生产环境使用相对路径
   if (import.meta.env.PROD) {
-    return '/api'
+    return `${import.meta.env.BASE_URL}api`
   }
 
   // 开发环境使用完整地址
@@ -27,9 +27,18 @@ const api = axios.create({
 // 请求拦截器 - 添加JWT令牌
 api.interceptors.request.use(
   (config) => {
+    // 飞牛统一网关会拦截带 Authorization 头的请求（整包不到应用），网关域上
+    // 会话由登录时种下的 HttpOnly cookie 携带（Path=网关前缀），不发该头；
+    // 直连端口（路径无 /app/ 前缀）维持 Authorization 传输。
+    const isGatewayPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/app/')
     const token = localStorage.getItem('token')
-    if (token) {
+    if (token && !isGatewayPath) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    // 飞牛授权登录的直连端口凭证：由网关跳板页签发，登录/绑定成功后由后端消费
+    const fnosTicket = sessionStorage.getItem('fnos_ticket')
+    if (fnosTicket) {
+      config.headers['X-FnOS-Ticket'] = fnosTicket
     }
     return config
   },
@@ -43,12 +52,12 @@ api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     // 如果是登录接口失败，不跳转（让调用者处理错误显示）
-    const isLoginRequest = error.config?.url?.includes('/auth/login')
+    const isLoginRequest = error.config?.url?.includes('/auth/login') || error.config?.url?.includes('/auth/fnos/')
     if (error.response?.status === 401 && !isLoginRequest) {
       // 清除token并跳转到登录页
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      window.location.href = `${import.meta.env.BASE_URL}login`
     }
     console.error('API Error:', error.response?.data || error.message)
     return Promise.reject(error)
@@ -72,6 +81,9 @@ export interface CreatePurchasePayload {
 
 export const purchaseApi = {
   create: (data: CreatePurchasePayload) => api.post('/purchases', data),
+  // 批量导入：一次提交多注（每条支持 periods 多期展开），后端单事务落库
+  createBatch: (items: CreatePurchasePayload[]): Promise<{ data: PurchaseRecord[]; total: number; message: string }> =>
+    api.post('/purchases/batch', { items }),
   list: (params?: { lottery_type?: string; status?: string; page?: number; size?: number }): Promise<ListResponse<PurchaseRecord>> =>
     api.get('/purchases', { params }),
   update: (id: number, data: Partial<CreatePurchasePayload>) => api.put(`/purchases/${id}`, data),
@@ -98,9 +110,9 @@ export const drawApi = {
   update: (id: number, data: Partial<CreateDrawPayload>) => api.put(`/draws/${id}`, data),
   delete: (id: number) => api.delete(`/draws/${id}`),
   fetchLatest: (lottery_type: string, issue?: string) =>
-    api.get('/draws/fetch', { params: { lottery_type, issue } }),
+    api.get('/draws/fetch', { params: { lottery_type, issue }, timeout: 30000 }),
   fetchBatch: (params: { lottery_type: string; start_date?: string; end_date?: string; count?: number }) =>
-    api.post('/draws/fetch-batch', params),
+    api.post('/draws/fetch-batch', params, { timeout: 30000 }),
   analysis: (lottery_type: string, count: number): Promise<{ data: DrawAnalysis }> =>
     api.get('/draws/analysis', { params: { lottery_type, count } }),
 }
@@ -146,10 +158,20 @@ export const authApi = {
     api.post('/auth/login', data),
   register: (data: RegisterRequest): Promise<AuthResponse> =>
     api.post('/auth/register', data),
+  fnosTicket: (): Promise<{ data: { ticket: string; fnos_username?: string } }> =>
+    api.post('/auth/fnos/ticket'),
+  fnosLogin: (data?: { remember?: boolean }): Promise<AuthResponse & { data: AuthResponse['data'] & { binding_required?: boolean; fnos_username?: string; has_accounts?: boolean; suggested_mode?: 'register' | 'bind'; suggested_username?: string } }> =>
+    api.post('/auth/fnos/login', data ?? {}),
+  bindFnOS: (data: { mode: 'register' | 'bind'; username: string; password: string; email?: string; remember?: boolean }): Promise<AuthResponse> =>
+    api.post('/auth/fnos/bind', data),
   getCurrentUser: (): Promise<{ data: User }> =>
     api.get('/auth/me'),
   checkAdmin: (): Promise<{ exists: boolean }> =>
     api.get('/auth/check-admin'),
+  // 退出登录：网关域上服务端要落一条「别再自动认人」的持久化标记，
+  // 只清 localStorage 会被下一个请求用网关注入身份认回来（退不掉）。
+  logout: (): Promise<{ message: string }> =>
+    api.post('/auth/logout'),
   changePassword: (data: { old_password: string; new_password: string }): Promise<{ message: string }> =>
     api.put('/auth/password', data),
 }

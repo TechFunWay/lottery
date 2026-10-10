@@ -4,9 +4,10 @@ import { purchaseApi, winningApi, drawApi } from '../api'
 import NumberInput from '../components/NumberInput.vue'
 import DigitNumberInput from '../components/DigitNumberInput.vue'
 import Pagination from '../components/Pagination.vue'
+import BatchImportModal from '../components/BatchImportModal.vue'
 import type { PurchaseRecord, LotteryType, DrawResult } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
-import { Plus, Trash2, Edit2, Copy, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-vue-next'
+import { Plus, Trash2, Edit2, Copy, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles, ListPlus } from 'lucide-vue-next'
 
 const purchases = ref<PurchaseRecord[]>([])
 const drawResults = ref<DrawResult[]>([])
@@ -26,6 +27,27 @@ const showBatchModal = ref(false)
 const batchDate = ref(new Date().toISOString().split('T')[0])
 const batchIssue = ref('')
 const batchCopying = ref(false)
+
+// 批量录入（粘贴多行号码）
+const showBatchImport = ref(false)
+
+// 按彩种整理全部已知期号，供批量录入校验期号
+const drawIssuesByType = computed(() => {
+  const map: Record<string, string[]> = {}
+  for (const d of drawResults.value) {
+    if (!map[d.lottery_type]) map[d.lottery_type] = []
+    map[d.lottery_type].push(d.issue_number)
+  }
+  return map
+})
+
+const onBatchImported = async (count: number) => {
+  showBatchImport.value = false
+  currentPage.value = 1
+  await loadPurchases()
+  await winningApi.recheck().catch(() => null)
+  showToast('success', `导入成功，共 ${count} 条`)
+}
 
 const toggleSelect = (id: number) => {
   const idx = selectedIds.value.indexOf(id)
@@ -124,8 +146,12 @@ const regenerateNumbers = () => {
 // 期号输入
 const issueNumber = ref('')
 
+// 幸运号：无历史期号时的内联二次确认提示条
+const luckyNewIssueConfirm = ref(false)
+
 // 验证期号：必须是未来的期号（大于等于当前最大期号）
-const validateIssueNumber = (): boolean => {
+// 无历史记录时返回 'new-issue'，由弹窗内的确认提示条二次确认（禁止原生 confirm）
+const validateIssueNumber = (): boolean | 'new-issue' => {
   const inputIssue = issueNumber.value.trim()
   if (!inputIssue) return false
 
@@ -137,7 +163,7 @@ const validateIssueNumber = (): boolean => {
 
   if (currentTypeRecords.length === 0) {
     // 没有历史期号，需要用户手动确认（可能是新一期的第一注）
-    return confirm('未找到当前期号记录，确定要添加到新期号吗？')
+    return 'new-issue'
   }
 
   // 获取最大期号
@@ -153,12 +179,19 @@ const validateIssueNumber = (): boolean => {
 }
 
 // 确认添加到购买记录
-const confirmAddFromLucky = async () => {
+const confirmAddFromLucky = async (forceNewIssue = false) => {
   if (!generatedNumbers.value || !issueNumber.value.trim()) return
   // 验证期号必须是未来期号
-  if (!validateIssueNumber()) {
+  const verdict = validateIssueNumber()
+  if (verdict === 'new-issue') {
+    if (!forceNewIssue) {
+      luckyNewIssueConfirm.value = true
+      return
+    }
+  } else if (!verdict) {
     return
   }
+  luckyNewIssueConfirm.value = false
   try {
     await purchaseApi.create({
       lottery_type: selectedLotteryType.value,
@@ -366,36 +399,27 @@ const confirmBatchCopy = async () => {
   if (batchCopying.value) return
   batchCopying.value = true
   try {
-    const promises = selectedPurchases.value.map(item =>
-      purchaseApi.create({
-        lottery_type: item.lottery_type,
-        issue_number: batchIssue.value.trim(),
-        purchase_date: batchDate.value,
-        numbers: item.numbers,
-        bet_type: item.bet_type,
-        amount: item.amount,
-        multiple: item.multiple || 1,
-        append: item.append || false,
-        periods: item.periods || 1,
-        remark: item.remark
-      })
-    )
-    const results = await Promise.allSettled(promises)
-    const succeeded = results.filter(r => r.status === 'fulfilled').length
-    const failed = results.filter(r => r.status === 'rejected').length
+    const items = selectedPurchases.value.map(item => ({
+      lottery_type: item.lottery_type,
+      issue_number: batchIssue.value.trim(),
+      purchase_date: batchDate.value,
+      numbers: item.numbers,
+      bet_type: item.bet_type,
+      amount: item.amount,
+      multiple: item.multiple || 1,
+      append: item.append || false,
+      periods: item.periods || 1,
+      remark: item.remark
+    }))
+    const res: any = await purchaseApi.createBatch(items)
+    const succeeded = res?.total ?? items.length
     showBatchModal.value = false
     selectedIds.value = []
     loadPurchases()
-    if (failed === 0) {
-      showToast('success', `成功复制 ${succeeded} 条记录`)
-    } else if (succeeded === 0) {
-      showToast('error', `全部失败，共 ${failed} 条`)
-    } else {
-      showToast('info', `成功 ${succeeded} 条，失败 ${failed} 条`)
-    }
-  } catch (e) {
+    showToast('success', `成功复制 ${succeeded} 条记录`)
+  } catch (e: any) {
     console.error('批量复制失败', e)
-    showToast('error', '批量复制失败')
+    showToast('error', e?.response?.data?.error || '批量复制失败')
   } finally {
     batchCopying.value = false
   }
@@ -734,6 +758,13 @@ const recheckWinnings = async () => {
           <p class="text-slate-400 text-sm mt-1">共 {{ purchases.length }} 条记录，累计投入 ¥{{ totalAmount.toFixed(2) }}</p>
         </div>
         <div class="flex items-center gap-2">
+          <button
+            @click="showBatchImport = true"
+            class="flex items-center gap-1.5 px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded-xl font-medium transition-all duration-200 shadow-lg shadow-slate-600/30 cursor-pointer"
+          >
+            <ListPlus class="w-4 h-4" />
+            <span class="hidden sm:inline">批量录入</span>
+          </button>
           <button
             @click="openLuckyModal"
             class="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-xl font-medium transition-all duration-200 shadow-lg shadow-amber-500/30 cursor-pointer"
@@ -1160,6 +1191,14 @@ const recheckWinnings = async () => {
       </div>
     </div>
 
+    <!-- 批量录入弹窗 -->
+    <BatchImportModal
+      v-if="showBatchImport"
+      :draw-issues="drawIssuesByType"
+      @close="showBatchImport = false"
+      @imported="onBatchImported"
+    />
+
     <!-- 批量复制弹窗 -->
     <div v-if="showBatchModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showBatchModal = false"></div>
@@ -1309,6 +1348,25 @@ const recheckWinnings = async () => {
               placeholder="请输入期号"
               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-amber-400"
             />
+            <!-- 无历史期号时的内联确认提示（替代原生 confirm） -->
+            <div v-if="luckyNewIssueConfirm" class="mt-2 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <AlertCircle class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div class="flex-1 text-xs text-amber-700">
+                <p>未找到当前期号的开奖记录，将作为新期号添加。</p>
+                <div class="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    @click="confirmAddFromLucky(true)"
+                    class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors cursor-pointer"
+                  >确定添加</button>
+                  <button
+                    type="button"
+                    @click="luckyNewIssueConfirm = false"
+                    class="px-3 py-1 text-slate-500 hover:bg-slate-100 rounded-lg font-medium transition-colors cursor-pointer"
+                  >再想想</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 生成的号码 -->
@@ -1349,7 +1407,7 @@ const recheckWinnings = async () => {
             取消
           </button>
           <button
-            @click="confirmAddFromLucky"
+            @click="confirmAddFromLucky()"
             class="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors cursor-pointer"
           >
             添加到购买记录
