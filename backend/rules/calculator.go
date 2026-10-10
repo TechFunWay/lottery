@@ -2,7 +2,7 @@ package rules
 
 import (
 	"encoding/json"
-	"sort"
+	"fmt"
 )
 
 // NumberSet 双色球号码结构
@@ -242,119 +242,173 @@ func CalculateDaLeTou(purchaseJSON, drawJSON string, multiple int, append bool) 
 	return 0, "未中奖", 0
 }
 
-// FuCai3DNumbers 福彩3D号码
-type FuCai3DNumbers struct {
-	Numbers []int  `json:"numbers"` // 3个数字 0-9
-	BetType string `json:"bet_type"` // 直选/组选6/组选3
+// 定位胆每命中一个位置的单位奖金（非官方标准玩法，可按需调整）
+const dingweiUnitPrize = 18.0
+
+// DigitBet 数字型彩票投注（福彩3D / 排列3 / 排列5）
+// 新结构：
+//   直选/定位胆 → positions（每位的候选数字数组，定位胆未投的位为空数组）
+//   组选3/组选6 → group（选中的数字集合）
+// 兼容旧结构：{ numbers:[...], bet_type:"直选" } 或裸数组 [..]
+type DigitBet struct {
+	Play      string  `json:"play"`      // 直选/组选3/组选6/定位胆
+	Positions [][]int `json:"positions"` // 直选/定位胆
+	Group     []int   `json:"group"`     // 组选
+	// 兼容旧格式
+	Numbers []int  `json:"numbers"`
+	BetType string `json:"bet_type"`
+}
+
+// parseDigitBet 解析投注号码，兼容旧格式
+func parseDigitBet(purchaseJSON string) (*DigitBet, bool) {
+	var b DigitBet
+	if err := json.Unmarshal([]byte(purchaseJSON), &b); err != nil {
+		// 可能是裸数组
+		var arr []int
+		if err2 := json.Unmarshal([]byte(purchaseJSON), &arr); err2 != nil {
+			return nil, false
+		}
+		b.Numbers = arr
+	}
+
+	// 归一化玩法
+	if b.Play == "" {
+		if b.BetType != "" {
+			b.Play = b.BetType
+		} else {
+			b.Play = "直选"
+		}
+	}
+
+	// 旧格式 numbers → 新结构
+	if len(b.Positions) == 0 && len(b.Group) == 0 && len(b.Numbers) > 0 {
+		if b.Play == "组选3" || b.Play == "组选6" {
+			b.Group = b.Numbers
+		} else {
+			for _, n := range b.Numbers {
+				b.Positions = append(b.Positions, []int{n})
+			}
+		}
+	}
+	return &b, true
+}
+
+// parseDrawDigits 解析开奖号码，兼容裸数组 / {numbers:[...]} / {numbers:[...],bet_type}
+func parseDrawDigits(drawJSON string) ([]int, bool) {
+	var arr []int
+	if err := json.Unmarshal([]byte(drawJSON), &arr); err == nil {
+		return arr, true
+	}
+	var obj struct {
+		Numbers []int `json:"numbers"`
+	}
+	if err := json.Unmarshal([]byte(drawJSON), &obj); err == nil && len(obj.Numbers) > 0 {
+		return obj.Numbers, true
+	}
+	return nil, false
+}
+
+func containsInt(s []int, v int) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// isZu6 判断开奖号是否为组六形态（3 个互不相同）
+func isZu6(d []int) bool {
+	return len(d) == 3 && d[0] != d[1] && d[1] != d[2] && d[0] != d[2]
+}
+
+// zu3Pair 判断开奖号是否为组三形态（AAB，恰好一对），返回成对值与单只值
+func zu3Pair(d []int) (pair int, single int, ok bool) {
+	if len(d) != 3 {
+		return 0, 0, false
+	}
+	switch {
+	case d[0] == d[1] && d[1] != d[2]:
+		return d[0], d[2], true
+	case d[0] == d[2] && d[0] != d[1]:
+		return d[0], d[1], true
+	case d[1] == d[2] && d[1] != d[0]:
+		return d[1], d[0], true
+	}
+	return 0, 0, false
+}
+
+// allIn 判断 vals 中每个数字都在 set 内
+func allIn(vals, set []int) bool {
+	for _, v := range vals {
+		if !containsInt(set, v) {
+			return false
+		}
+	}
+	return true
+}
+
+// calcDigit 数字型彩票通用中奖计算
+// zu6Prize/zu3Prize/dingweiUnit 为 0 时表示该玩法不适用（如排列5 仅直选）
+func calcDigit(purchaseJSON, drawJSON string, multiple int, digitCount int, directPrize, zu6Prize, zu3Prize, dingweiUnit float64) (int, string, float64) {
+	bet, ok := parseDigitBet(purchaseJSON)
+	if !ok {
+		return 0, "未中奖", 0
+	}
+	draw, ok := parseDrawDigits(drawJSON)
+	if !ok || len(draw) != digitCount {
+		return 0, "未中奖", 0
+	}
+	m := float64(multiple)
+
+	switch bet.Play {
+	case "直选":
+		if len(bet.Positions) != digitCount {
+			return 0, "未中奖", 0
+		}
+		for i := 0; i < digitCount; i++ {
+			if !containsInt(bet.Positions[i], draw[i]) {
+				return 0, "未中奖", 0
+			}
+		}
+		return 1, "直选奖", directPrize * m
+	case "定位胆":
+		if dingweiUnit <= 0 {
+			return 0, "未中奖", 0
+		}
+		matched := 0
+		for i := 0; i < digitCount && i < len(bet.Positions); i++ {
+			if len(bet.Positions[i]) > 0 && containsInt(bet.Positions[i], draw[i]) {
+				matched++
+			}
+		}
+		if matched > 0 {
+			return 1, fmt.Sprintf("定位胆(中%d位)", matched), dingweiUnit * float64(matched) * m
+		}
+	case "组选6":
+		if zu6Prize > 0 && isZu6(draw) && allIn(draw, bet.Group) {
+			return 2, "组选6奖", zu6Prize * m
+		}
+	case "组选3":
+		if zu3Prize > 0 {
+			if pair, single, isZu3 := zu3Pair(draw); isZu3 && containsInt(bet.Group, pair) && containsInt(bet.Group, single) {
+				return 2, "组选3奖", zu3Prize * m
+			}
+		}
+	}
+	return 0, "未中奖", 0
 }
 
 func CalculateFuCai3D(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
-	var purchase FuCai3DNumbers
-	var drawNums []int
-	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
-		return 0, "未中奖", 0
-	}
-	if err := json.Unmarshal([]byte(drawJSON), &drawNums); err != nil {
-		return 0, "未中奖", 0
-	}
-
-	if len(purchase.Numbers) != 3 || len(drawNums) != 3 {
-		return 0, "未中奖", 0
-	}
-
-	switch purchase.BetType {
-	case "直选":
-		if purchase.Numbers[0] == drawNums[0] && purchase.Numbers[1] == drawNums[1] && purchase.Numbers[2] == drawNums[2] {
-			return 1, "直选奖", 1040 * float64(multiple)}
-	case "组选6":
-		p := make([]int, 3)
-		d := make([]int, 3)
-		copy(p, purchase.Numbers)
-		copy(d, drawNums)
-		sort.Ints(p)
-		sort.Ints(d)
-		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选6奖", 173 * float64(multiple)}
-	case "组选3":
-		p := make([]int, 3)
-		d := make([]int, 3)
-		copy(p, purchase.Numbers)
-		copy(d, drawNums)
-		sort.Ints(p)
-		sort.Ints(d)
-		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选3奖", 346 * float64(multiple)}
-	}
-	return 0, "未中奖", 0
-}
-
-// PaiLieNumbers 排列号码
-type PaiLieNumbers struct {
-	Numbers []int  `json:"numbers"`
-	BetType string `json:"bet_type"` // 直选/组选
+	return calcDigit(purchaseJSON, drawJSON, multiple, 3, 1040, 173, 346, dingweiUnitPrize)
 }
 
 func CalculatePaiLie3(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
-	var purchase FuCai3DNumbers
-	var drawNums []int
-	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
-		return 0, "未中奖", 0
-	}
-	if err := json.Unmarshal([]byte(drawJSON), &drawNums); err != nil {
-		return 0, "未中奖", 0
-	}
-	if len(purchase.Numbers) != 3 || len(drawNums) != 3 {
-		return 0, "未中奖", 0
-	}
-	switch purchase.BetType {
-	case "直选":
-		if purchase.Numbers[0] == drawNums[0] && purchase.Numbers[1] == drawNums[1] && purchase.Numbers[2] == drawNums[2] {
-			return 1, "直选奖", 1040 * float64(multiple)}
-	case "组选6":
-		p := make([]int, 3)
-		d := make([]int, 3)
-		copy(p, purchase.Numbers)
-		copy(d, drawNums)
-		sort.Ints(p)
-		sort.Ints(d)
-		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选6奖", 173 * float64(multiple)}
-	case "组选3":
-		p := make([]int, 3)
-		d := make([]int, 3)
-		copy(p, purchase.Numbers)
-		copy(d, drawNums)
-		sort.Ints(p)
-		sort.Ints(d)
-		if p[0] == d[0] && p[1] == d[1] && p[2] == d[2] {
-			return 2, "组选3奖", 346 * float64(multiple)}
-	}
-	return 0, "未中奖", 0
+	return calcDigit(purchaseJSON, drawJSON, multiple, 3, 1040, 173, 346, dingweiUnitPrize)
 }
 
 func CalculatePaiLie5(purchaseJSON, drawJSON string, multiple int) (level int, name string, amount float64) {
-	var purchase PaiLieNumbers
-	var drawNums []int
-	if err := json.Unmarshal([]byte(purchaseJSON), &purchase); err != nil {
-		return 0, "未中奖", 0
-	}
-	if err := json.Unmarshal([]byte(drawJSON), &drawNums); err != nil {
-		return 0, "未中奖", 0
-	}
-	if len(purchase.Numbers) != 5 || len(drawNums) != 5 {
-		return 0, "未中奖", 0
-	}
-	match := true
-	for i := range purchase.Numbers {
-		if purchase.Numbers[i] != drawNums[i] {
-			match = false
-			break
-		}
-	}
-	if match {
-		return 1, "直选奖", 100000 * float64(multiple)
-	}
-	return 0, "未中奖", 0
+	return calcDigit(purchaseJSON, drawJSON, multiple, 5, 100000, 0, 0, 0)
 }
 
 // QiLeCaiNumbers 七乐彩号码

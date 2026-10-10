@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview } from '../types'
+import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview, FootballConfigStatus, FootballTestResult } from '../types'
 
 // API 基础路径配置
 // 开发环境: http://localhost:8902/api
@@ -108,6 +108,9 @@ export const winningApi = {
   list: (params?: { lottery_type?: string; page?: number; size?: number }): Promise<ListResponse<WinningRecord>> =>
     api.get('/winnings', { params }),
   recheck: () => api.post('/winnings/recheck'),
+  // 手动调整中奖金额：传 number 设置，传 null 还原为系统计算值
+  update: (id: number, manual_amount: number | null) =>
+    api.put(`/winnings/${id}`, { manual_amount }),
 }
 
 // ===== 统计分析 API =====
@@ -170,6 +173,25 @@ export const configApi = {
   // 批量更新配置（管理员）
   updateBatch: (configs: SystemConfig[]): Promise<{ message: string }> =>
     api.put('/configs', configs),
+}
+
+// ===== 竞彩足球数据源 API =====
+export const footballConfigApi = {
+  // 公开状态(system-level)
+  getSystemStatus: (): Promise<{ data: FootballConfigStatus }> =>
+    api.get('/football/config/status'),
+  // 当前用户的有效 key 状态
+  getMyStatus: (): Promise<{ data: FootballConfigStatus }> =>
+    api.get('/football/config/me'),
+  // 设置/清除当前用户的 key(空 = 清除)
+  setMyKey: (key: string): Promise<{ message: string }> =>
+    api.put('/football/config/me', { key }),
+  // 管理员设置全局 key
+  setGlobalKey: (key: string): Promise<{ message: string }> =>
+    api.put('/football/config/global', { key }),
+  // 测试 key(body.key 留空则用当前用户有效 key)
+  testKey: (key: string): Promise<{ data: FootballTestResult }> =>
+    api.post('/football/config/test', { key }),
 }
 
 // ===== 系统信息 API =====

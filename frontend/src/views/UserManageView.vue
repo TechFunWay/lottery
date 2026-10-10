@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { userApi, configApi } from '../api'
+import { userApi, configApi, footballConfigApi } from '../api'
 import { hashPassword } from '../utils/crypto'
-import type { User, SystemConfig } from '../types'
+import type { User, SystemConfig, FootballTestResult } from '../types'
 import {
   Users, Lock, Unlock, Shield, ShieldCheck, Trash2, RefreshCw,
-  Settings, ToggleLeft, ToggleRight, Save, KeyRound, X, CheckCircle2, AlertCircle,
+  Settings, ToggleLeft, ToggleRight, Save, KeyRound, X, CheckCircle2, AlertCircle, TestTube2, Info, ExternalLink,
 } from 'lucide-vue-next'
 
 // ===== 用户管理 =====
@@ -188,6 +188,74 @@ const isAdmin = computed(() => {
   return JSON.parse(userStr).role === 'admin'
 })
 
+// ===== 竞彩足球数据源(全局 key) =====
+const globalKeyInput = ref('')
+const globalKeyStatus = ref<{ configured: boolean; source: string; masked_key: string } | null>(null)
+const globalKeyLoading = ref(false)
+const globalKeySaving = ref(false)
+const globalKeyClearing = ref(false)
+const globalKeyTesting = ref(false)
+const globalKeyTestResult = ref<FootballTestResult | null>(null)
+
+const loadGlobalKeyStatus = async () => {
+  globalKeyLoading.value = true
+  try {
+    const res = await footballConfigApi.getSystemStatus()
+    globalKeyStatus.value = res.data
+  } catch (err: any) {
+    console.error('加载全局 Key 状态失败:', err)
+  } finally {
+    globalKeyLoading.value = false
+  }
+}
+
+const saveGlobalKey = async () => {
+  if (!globalKeyInput.value.trim()) {
+    showAlertMessage('请输入 Key', 'error')
+    return
+  }
+  globalKeySaving.value = true
+  try {
+    const res = await footballConfigApi.setGlobalKey(globalKeyInput.value.trim())
+    showAlertMessage(res.message, 'success')
+    globalKeyInput.value = ''
+    globalKeyTestResult.value = null
+    await loadGlobalKeyStatus()
+  } catch (err: any) {
+    showAlertMessage(err.response?.data?.error || '保存失败', 'error')
+  } finally {
+    globalKeySaving.value = false
+  }
+}
+
+const testGlobalKey = async () => {
+  globalKeyTesting.value = true
+  globalKeyTestResult.value = null
+  try {
+    const res = await footballConfigApi.testKey(globalKeyInput.value.trim())
+    globalKeyTestResult.value = res.data
+  } catch (err: any) {
+    globalKeyTestResult.value = { success: false, message: err.response?.data?.error || '测试失败' }
+  } finally {
+    globalKeyTesting.value = false
+  }
+}
+
+const clearGlobalKey = async () => {
+  if (!confirm('确定要清除全局 Key 吗?清除后仅自配用户的 Key 仍可工作。')) return
+  globalKeyClearing.value = true
+  try {
+    const res = await footballConfigApi.setGlobalKey('')
+    showAlertMessage(res.message, 'success')
+    globalKeyTestResult.value = null
+    await loadGlobalKeyStatus()
+  } catch (err: any) {
+    showAlertMessage(err.response?.data?.error || '清除失败', 'error')
+  } finally {
+    globalKeyClearing.value = false
+  }
+}
+
 // 当前激活的 tab
 const activeTab = ref<'users' | 'configs'>('users')
 
@@ -195,6 +263,7 @@ onMounted(() => {
   if (isAdmin.value) {
     fetchUsers()
     fetchConfigs()
+    loadGlobalKeyStatus()
   }
 })
 </script>
@@ -458,6 +527,97 @@ onMounted(() => {
             <Save v-else class="w-4 h-4" />
             保存配置
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl card-shadow overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+            <KeyRound class="w-5 h-5 text-amber-500" />
+            全局 API-Football Key
+          </h2>
+          <p class="text-xs text-slate-500 mt-1">供未自配的用户降级使用 · 修改后立即生效,所有用户都受益</p>
+        </div>
+        <button @click="loadGlobalKeyStatus" :disabled="globalKeyLoading"
+          class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-50">
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': globalKeyLoading }" />
+        </button>
+      </div>
+
+      <div class="px-6 py-4 space-y-4">
+        <div v-if="globalKeyStatus" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div class="flex items-center justify-between sm:block">
+            <span class="text-slate-500">状态</span>
+            <span v-if="globalKeyStatus.configured" class="ml-2 sm:ml-0 inline-flex items-center gap-1 text-emerald-600 font-medium">
+              <CheckCircle2 class="w-3.5 h-3.5" />已配置
+            </span>
+            <span v-else class="ml-2 sm:ml-0 inline-flex items-center gap-1 text-amber-600 font-medium">
+              <Info class="w-3.5 h-3.5" />未配置
+            </span>
+          </div>
+          <div class="flex items-center justify-between sm:block">
+            <span class="text-slate-500">来源</span>
+            <span class="ml-2 sm:ml-0 text-slate-700 font-medium">
+              {{ globalKeyStatus.source === 'admin' ? '数据库' : globalKeyStatus.source === 'env' ? '环境变量' : globalKeyStatus.source === 'builtin' ? '内置(随应用发布)' : '无' }}
+            </span>
+          </div>
+          <div v-if="globalKeyStatus.masked_key" class="flex items-center justify-between sm:block">
+            <span class="text-slate-500">当前 Key</span>
+            <code class="ml-2 sm:ml-0 text-xs font-mono bg-slate-100 px-1.5 py-0.5 rounded">{{ globalKeyStatus.masked_key }}</code>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">新 Key</label>
+          <input
+            v-model="globalKeyInput"
+            type="password"
+            placeholder="留空保存即清除"
+            class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-mono text-sm"
+            @keyup.enter="saveGlobalKey"
+          />
+        </div>
+
+        <div v-if="globalKeyTestResult" class="p-3 rounded-lg text-sm flex items-start gap-2"
+          :class="globalKeyTestResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'">
+          <CheckCircle2 v-if="globalKeyTestResult.success" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <Info v-else class="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{{ globalKeyTestResult.message }}</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button @click="saveGlobalKey" :disabled="globalKeySaving || !globalKeyInput.trim()"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+            <RefreshCw v-if="globalKeySaving" class="w-4 h-4 animate-spin" />
+            <Save v-else class="w-4 h-4" />
+            保存
+          </button>
+          <button @click="testGlobalKey" :disabled="globalKeyTesting || !globalKeyInput.trim()"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+            <RefreshCw v-if="globalKeyTesting" class="w-4 h-4 animate-spin" />
+            <TestTube2 v-else class="w-4 h-4" />
+            测试
+          </button>
+          <button v-if="globalKeyStatus?.configured" @click="clearGlobalKey" :disabled="globalKeyClearing"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+            <RefreshCw v-if="globalKeyClearing" class="w-4 h-4 animate-spin" />
+            <Trash2 v-else class="w-4 h-4" />
+            清除全局 Key
+          </button>
+        </div>
+
+        <div class="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
+          <Info class="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            还没注册?
+            <a href="https://dashboard.api-football.com/prod/register" target="_blank" rel="noopener"
+              class="inline-flex items-center gap-0.5 underline font-medium">
+              api-football.com 注册免费 Key <ExternalLink class="w-3 h-3" />
+            </a>
+            (邮箱注册,无需信用卡,100 次/天)
+          </span>
         </div>
       </div>
     </div>

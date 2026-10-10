@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { title: '投注记录', requiresAuth: true }
     },
     {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsView.vue'),
+      meta: { title: '数据源设置', requiresAuth: true }
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: () => import('../views/UserManageView.vue'),

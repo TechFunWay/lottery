@@ -29,6 +29,10 @@ var UpgradeScripts = map[string]UpgradeScript{
 		Name: "追加倍数多期投注",
 		Func: upgrade_v1_2_0,
 	},
+	"v1.3.0": {
+		Name: "中奖金额手动调整",
+		Func: upgrade_v1_3_0,
+	},
 }
 
 // upgrade_v1_0_0 初始化数据库（当前版本）
@@ -74,6 +78,14 @@ func upgrade_v1_1_0(db *gorm.DB) error {
 func upgrade_v1_2_0(db *gorm.DB) error {
 	// 为 purchase_records 表新增 multiple、append、periods 字段
 	if err := db.AutoMigrate(&models.PurchaseRecord{}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func upgrade_v1_3_0(db *gorm.DB) error {
+	// 为 winning_records 表新增 manual_amount 字段（手动调整奖金）
+	if err := db.AutoMigrate(&models.WinningRecord{}); err != nil {
 		return err
 	}
 	return nil
