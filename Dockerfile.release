@@ -1,3 +1,7 @@
+# CA 根证书阶段：scratch 镜像没有证书包，后端出站 HTTPS（统计/赞赏上报）需要
+FROM alpine:3.21 AS certs
+RUN apk add --no-cache ca-certificates
+
 FROM scratch
 
 WORKDIR /app
@@ -5,6 +9,7 @@ WORKDIR /app
 ARG TARGETARCH
 ARG VERSION
 
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-${TARGETARCH}/lottery /app/lottery
 COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/index.html /app/index.html
 COPY release/${VERSION}/lottery-assistant-${VERSION}-linux-amd64/lottery-web /app/lottery-web

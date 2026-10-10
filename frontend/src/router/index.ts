@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/login',
@@ -107,6 +107,12 @@ router.beforeEach((to, from, next) => {
       next('/')
       return
     }
+  }
+
+  // 飞牛授权桥接窗口：显式携带 fnos_bridge 参数时清除旧登录态，让登录页接管流程
+  if (to.query.fnos_bridge === '1') {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
   }
 
   // 已登录用户访问登录页，跳转到首页

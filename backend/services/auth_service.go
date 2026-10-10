@@ -1,12 +1,12 @@
 package services
 
 import (
+	"errors"
 	"lottery-backend/database"
 	"lottery-backend/logger"
 	"lottery-backend/middleware"
 	"lottery-backend/models"
 	"lottery-backend/utils"
-	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -117,7 +117,10 @@ func (s *AuthService) GetAllUsers() ([]models.User, error) {
 
 // UpdateUserStatus 更新用户状态（仅管理员）
 func (s *AuthService) UpdateUserStatus(userID uint, status string) error {
-	return s.GetDB().Model(&models.User{}).Where("id = ?", userID).Update("status", status).Error
+	return s.GetDB().Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"status":        status,
+		"token_version": gorm.Expr("token_version + 1"),
+	}).Error
 }
 
 // UpdateUserRole 更新用户角色（仅管理员）
@@ -137,7 +140,10 @@ func (s *AuthService) UpdateUserRole(userID uint, role string) error {
 		}
 	}
 
-	return s.GetDB().Model(&models.User{}).Where("id = ?", userID).Update("role", role).Error
+	return s.GetDB().Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"role":          role,
+		"token_version": gorm.Expr("token_version + 1"),
+	}).Error
 }
 
 // DeleteUser 删除用户（仅管理员）
@@ -153,8 +159,13 @@ func (s *AuthService) DeleteUser(userID uint) error {
 		return errors.New("不能删除管理员账号")
 	}
 
-	// 软删除
-	return s.GetDB().Delete(&models.User{}, userID).Error
+	// 同步清理可选的飞牛身份映射，避免软删除用户遗留不可恢复的绑定。
+	return s.GetDB().Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&models.FnOSBinding{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.User{}, userID).Error
+	})
 }
 
 // CheckAdminExists 检查是否存在管理员
@@ -178,7 +189,10 @@ func (s *AuthService) ResetAdminPassword(password string) (string, error) {
 	// 第二步：加盐后端 MD5（与前端登录/注册流程一致）
 	hashedPassword := utils.HashPassword(firstHash)
 
-	if err := s.GetDB().Model(&admin).Update("password", hashedPassword).Error; err != nil {
+	if err := s.GetDB().Model(&admin).Updates(map[string]interface{}{
+		"password":      hashedPassword,
+		"token_version": gorm.Expr("token_version + 1"),
+	}).Error; err != nil {
 		return "", err
 	}
 
@@ -202,7 +216,10 @@ func (s *AuthService) UpdateUserPassword(userID uint, password string) error {
 
 	hashedPassword := utils.HashPassword(password)
 
-	result := s.GetDB().Model(&models.User{}).Where("id = ?", userID).Update("password", hashedPassword)
+	result := s.GetDB().Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"password":      hashedPassword,
+		"token_version": gorm.Expr("token_version + 1"),
+	})
 	logger.GetSugarLogger().Debugf("Update result: rowsAffected=%d, error=%v", result.RowsAffected, result.Error)
 	return result.Error
 }
@@ -223,5 +240,8 @@ func (s *AuthService) ChangePassword(userID uint, oldPassword, newPassword strin
 
 	// 更新新密码（前端已MD5，后端再做加盐MD5）
 	newHashed := utils.HashPassword(newPassword)
-	return s.GetDB().Model(&models.User{}).Where("id = ?", userID).Update("password", newHashed).Error
+	return s.GetDB().Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"password":      newHashed,
+		"token_version": gorm.Expr("token_version + 1"),
+	}).Error
 }

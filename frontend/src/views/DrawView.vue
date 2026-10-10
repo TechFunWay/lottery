@@ -185,6 +185,10 @@ const fetchDraw = async () => {
   loading.value = false
   if (res) {
     const draw = res.data
+    if (!draw || !draw.issue_number) {
+      showToast('error', '服务响应异常，请稍后重试；若反复出现请查看应用日志')
+      return
+    }
     form.value.issue_number = draw.issue_number
     form.value.draw_date = draw.draw_date.split('T')[0]
     form.value.numbers = draw.numbers
@@ -261,15 +265,15 @@ const fetchBatchDraws = async () => {
       count: batchForm.value.count
     })
     const data = res.data
-    let msg = `成功获取 ${data?.total || 0} 条，新增 ${data?.count || 0} 条`
-    if (data?.exist_count > 0) {
-      msg += `，已存在 ${data.exist_count} 条`
+    if (!data || !data.started) {
+      // 响应被网关截断或结构异常时明确报错，避免误显示"成功获取 0 条"
+      showToast('error', '服务响应异常，请稍后重试；若反复出现请查看应用日志')
+      return
     }
     closeBatchModal()
-    loadDraws()
-    // 自动触发中奖检查
-    await winningApi.recheck()
-    showToast('success', msg)
+    showToast('success', '抓取任务已在后台开始，稍后自动刷新列表')
+    // 后台抓取完成后自动刷新；手动刷新也随时可看
+    setTimeout(() => { loadDraws() }, 8000)
   } catch (e: any) {
     console.error('批量抓取失败', e)
     showToast('error', '批量抓取失败：' + (e.response?.data?.error || e.message))

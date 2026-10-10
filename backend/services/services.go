@@ -142,10 +142,14 @@ func (s *DrawService) FetchDrawResult(lotteryType models.LotteryType, issue stri
 		return s.fetchShuangSeQiu(issue)
 	case models.DaLeTou:
 		return s.fetchDaLeTou(issue)
-	case models.QiLeCai:
-		return s.fetchQiLeCai(issue)
+	case models.FuCai3D:
+		return s.fetchFuCai3D(issue)
+	case models.PaiLie3:
+		return s.fetchPaiLie3(issue)
 	case models.PaiLie5:
 		return s.fetchPaiLie5(issue)
+	case models.QiLeCai:
+		return s.fetchQiLeCai(issue)
 	default:
 		return nil, fmt.Errorf("暂不支持自动抓取 %s 开奖结果", lotteryType)
 	}
@@ -174,8 +178,9 @@ type cwlDrawItem struct {
 }
 
 type cwlResp struct {
-	State  int           `json:"state"`
-	Result []cwlDrawItem `json:"result"`
+	State   int           `json:"state"`
+	Message string        `json:"message"`
+	Result  []cwlDrawItem `json:"result"`
 }
 
 // fetchShuangSeQiu 抓取双色球开奖结果（优先使用中国福彩官网API，支持指定期号）
@@ -339,6 +344,112 @@ type daLeTouAPIResp struct {
 	} `json:"value"`
 }
 
+// fetchCwlDraws 从中国福彩官网抓取指定彩种最近 count 期开奖（name：双色球=ssq、福彩3D=3d）
+func (s *DrawService) fetchCwlDraws(name string, count int) ([]cwlDrawItem, error) {
+	url := fmt.Sprintf("https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=%s&issueCount=%d", name, count)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Referer", "https://www.cwl.gov.cn/")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("福彩官网接口返回 HTTP %d: %.200s", resp.StatusCode, string(body))
+	}
+
+	var apiResp cwlResp
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析开奖数据失败: %v", err)
+	}
+	if apiResp.State != 0 || len(apiResp.Result) == 0 {
+		return nil, fmt.Errorf("福彩官网未返回开奖数据(state=%d): %s", apiResp.State, apiResp.Message)
+	}
+	return apiResp.Result, nil
+}
+
+// pickCwlItem 从开奖列表中取指定期号，issue 为空取最新一期
+func pickCwlItem(items []cwlDrawItem, issue string) (*cwlDrawItem, error) {
+	if issue == "" {
+		return &items[0], nil
+	}
+	for i := range items {
+		if items[i].Code == issue {
+			return &items[i], nil
+		}
+	}
+	return nil, fmt.Errorf("未找到第 %s 期开奖数据", issue)
+}
+
+// cwlItemDate 去掉官网日期里的星期后缀："2026-10-06(二)" -> "2026-10-06"
+func cwlItemDate(date string) string {
+	if idx := strings.Index(date, "("); idx > 0 {
+		return date[:idx]
+	}
+	return date
+}
+
+// fetchFuCai3D 抓取福彩3D开奖结果（中国福彩官网，接口格式与双色球一致，号码为3位）
+func (s *DrawService) fetchFuCai3D(issue string) (*models.DrawResult, error) {
+	items, err := s.fetchCwlDraws("3d", 30)
+	if err != nil {
+		return nil, fmt.Errorf("获取福彩3D开奖数据失败: %v", err)
+	}
+
+	item, err := pickCwlItem(items, issue)
+	if err != nil {
+		return nil, err
+	}
+
+	numbersJSON, _ := json.Marshal(rules.FuCai3DNumbers{Numbers: parseNumbers(item.Red)})
+	drawDate, _ := time.Parse("2006-01-02", cwlItemDate(item.Date))
+
+	return &models.DrawResult{
+		LotteryType: models.FuCai3D,
+		IssueNumber: item.Code,
+		DrawDate:    drawDate,
+		Numbers:     string(numbersJSON),
+		Source:      "auto",
+	}, nil
+}
+
+// fetchBatchFuCai3D 批量抓取福彩3D
+func (s *DrawService) fetchBatchFuCai3D(startDate, endDate string, count int) ([]*models.DrawResult, error) {
+	if count <= 0 {
+		count = 20
+	}
+	items, err := s.fetchCwlDraws("3d", count)
+	if err != nil {
+		return nil, fmt.Errorf("获取福彩3D开奖数据失败: %v", err)
+	}
+
+	var results []*models.DrawResult
+	for _, item := range items {
+		numbersJSON, _ := json.Marshal(rules.FuCai3DNumbers{Numbers: parseNumbers(item.Red)})
+		drawDate, _ := time.Parse("2006-01-02", cwlItemDate(item.Date))
+		results = append(results, &models.DrawResult{
+			LotteryType: models.FuCai3D,
+			IssueNumber: item.Code,
+			DrawDate:    drawDate,
+			Numbers:     string(numbersJSON),
+			Source:      "auto",
+		})
+	}
+	return results, nil
+}
+
 func (s *DrawService) fetchDaLeTou(issue string) (*models.DrawResult, error) {
 	url := "http://api.huiniao.top/interface/home/lotteryHistory?type=dlt&page=1&limit=1"
 
@@ -429,10 +540,14 @@ func (s *DrawService) FetchBatchDrawResults(lotteryType models.LotteryType, star
 		return s.fetchBatchShuangSeQiu(startDate, endDate, count)
 	case models.DaLeTou:
 		return s.fetchBatchDaLeTou(startDate, endDate, count)
-	case models.QiLeCai:
-		return s.fetchBatchQiLeCai(startDate, endDate, count)
+	case models.FuCai3D:
+		return s.fetchBatchFuCai3D(startDate, endDate, count)
+	case models.PaiLie3:
+		return s.fetchBatchPaiLie3(startDate, endDate, count)
 	case models.PaiLie5:
 		return s.fetchBatchPaiLie5(startDate, endDate, count)
+	case models.QiLeCai:
+		return s.fetchBatchQiLeCai(startDate, endDate, count)
 	default:
 		return nil, fmt.Errorf("暂不支持自动抓取 %s 开奖结果", lotteryType)
 	}
@@ -709,9 +824,155 @@ func (s *DrawService) fetchBatchQiLeCai(startDate, endDate string, count int) ([
 	return results, nil
 }
 
-// fetchPaiLie5 抓取排列5开奖结果
+// sportteryResp 体彩官网开奖历史响应（gameNo：排列3=35、排列5=350133、超级大乐透=85）
+type sportteryDrawItem struct {
+	LotteryGameName   string `json:"lotteryGameName"`
+	LotteryGameNum    string `json:"lotteryGameNum"`
+	LotteryDrawNum    string `json:"lotteryDrawNum"`
+	LotteryDrawResult string `json:"lotteryDrawResult"` // 空格分隔，如 "9 5 4"
+	LotteryDrawTime   string `json:"lotteryDrawTime"`   // "2026-10-06"
+}
+
+type sportteryResp struct {
+	Success   bool   `json:"success"`
+	ErrorCode string `json:"errorCode"`
+	Value     struct {
+		Total int                 `json:"total"`
+		List  []sportteryDrawItem `json:"list"`
+	} `json:"value"`
+}
+
+// fetchSportteryHistory 从体彩官网抓取指定彩种最近 count 期开奖（单页上限 100）
+func fetchSportteryHistory(gameNo string, count int) ([]sportteryDrawItem, error) {
+	if count > 100 {
+		count = 100
+	}
+	if count <= 0 {
+		count = 30
+	}
+	url := fmt.Sprintf("https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=%s&provinceId=0&pageSize=%d&isVerify=1&pageNo=1&termLimits=%d", gameNo, count, count)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Referer", "https://static.sporttery.cn/")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("体彩官网接口返回 HTTP %d: %.200s", resp.StatusCode, string(body))
+	}
+
+	var apiResp sportteryResp
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析开奖数据失败: %v", err)
+	}
+	if !apiResp.Success || len(apiResp.Value.List) == 0 {
+		return nil, fmt.Errorf("体彩官网未返回开奖数据(success=%v, errorCode=%s, total=%d)", apiResp.Success, apiResp.ErrorCode, apiResp.Value.Total)
+	}
+	return apiResp.Value.List, nil
+}
+
+// digitNumbers 数字型彩票（福彩3D/排列3/排列5）通用号码结构，与 rules 包内各 Numbers 类型同构
+type digitNumbers struct {
+	Numbers []int `json:"numbers"`
+}
+
+// sportteryItemToDraw 体彩官网条目转开奖记录，开奖号码须为 digitCount 位
+func sportteryItemToDraw(item sportteryDrawItem, lt models.LotteryType, digitCount int) (*models.DrawResult, error) {
+	numbers := parseSpaceNumbers(item.LotteryDrawResult)
+	if len(numbers) != digitCount {
+		return nil, fmt.Errorf("开奖号码位数不符: %s", item.LotteryDrawResult)
+	}
+	numbersJSON, _ := json.Marshal(digitNumbers{Numbers: numbers})
+	drawDate, _ := time.Parse("2006-01-02", item.LotteryDrawTime)
+	return &models.DrawResult{
+		LotteryType: lt,
+		IssueNumber: item.LotteryDrawNum,
+		DrawDate:    drawDate,
+		Numbers:     string(numbersJSON),
+		Source:      "auto",
+	}, nil
+}
+
+// pickSportteryItem 从体彩官网列表中取指定期号，issue 为空取最新一期
+func pickSportteryItem(items []sportteryDrawItem, issue string) (*sportteryDrawItem, error) {
+	if issue == "" {
+		return &items[0], nil
+	}
+	for i := range items {
+		if items[i].LotteryDrawNum == issue {
+			return &items[i], nil
+		}
+	}
+	return nil, fmt.Errorf("未找到第 %s 期开奖数据", issue)
+}
+
+// fetchPaiLie3 抓取排列3开奖结果（体彩官网）
+func (s *DrawService) fetchPaiLie3(issue string) (*models.DrawResult, error) {
+	items, err := fetchSportteryHistory("35", 30)
+	if err != nil {
+		return nil, fmt.Errorf("获取排列3开奖数据失败: %v", err)
+	}
+	item, err := pickSportteryItem(items, issue)
+	if err != nil {
+		return nil, err
+	}
+	return sportteryItemToDraw(*item, models.PaiLie3, 3)
+}
+
+// fetchBatchPaiLie3 批量抓取排列3
+func (s *DrawService) fetchBatchPaiLie3(startDate, endDate string, count int) ([]*models.DrawResult, error) {
+	items, err := fetchSportteryHistory("35", count)
+	if err != nil {
+		return nil, fmt.Errorf("获取排列3开奖数据失败: %v", err)
+	}
+
+	var results []*models.DrawResult
+	for _, item := range items {
+		draw, err := sportteryItemToDraw(item, models.PaiLie3, 3)
+		if err != nil {
+			continue
+		}
+		results = append(results, draw)
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("体彩官网返回 %d 期数据但均无法解析为排列3号码", len(items))
+	}
+	return results, nil
+}
+
+// fetchPaiLie5 抓取排列5开奖结果（主源体彩官网，失败降级慧鸟）
 func (s *DrawService) fetchPaiLie5(issue string) (*models.DrawResult, error) {
-	url := "http://api.huiniao.top/interface/home/lotteryHistory?type=pl5&page=1&limit=1"
+	items, err := fetchSportteryHistory("350133", 30)
+	if err == nil {
+		item, pickErr := pickSportteryItem(items, issue)
+		if pickErr == nil {
+			return sportteryItemToDraw(*item, models.PaiLie5, 5)
+		}
+		if issue != "" {
+			// 指定期号且官网翻页范围内没有，交给慧鸟兜底
+			return s.fetchPaiLie5Huiniao(issue)
+		}
+	}
+	return s.fetchPaiLie5Huiniao(issue)
+}
+
+// fetchPaiLie5Huiniao 慧鸟API抓取排列5（降级方案）
+func (s *DrawService) fetchPaiLie5Huiniao(issue string) (*models.DrawResult, error) {
+	url := "http://api.huiniao.top/interface/home/lotteryHistory?type=pl5&page=1&limit=30"
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
@@ -740,7 +1001,21 @@ func (s *DrawService) fetchPaiLie5(issue string) (*models.DrawResult, error) {
 		return nil, fmt.Errorf("获取排列5开奖数据失败: %s", apiResp.Info)
 	}
 
-	item := apiResp.Data.Data.List[0]
+	list := apiResp.Data.Data.List
+	item := list[0]
+	if issue != "" {
+		found := false
+		for _, r := range list {
+			if r.Code == issue {
+				item = r
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("未找到第 %s 期开奖数据", issue)
+		}
+	}
 	// 排列5是5位数字
 	numbers := []int{parseInt(item.One), parseInt(item.Two), parseInt(item.Three), parseInt(item.Four), parseInt(item.Five)}
 	numbersJSON, _ := json.Marshal(rules.PaiLie5Numbers{
@@ -757,8 +1032,30 @@ func (s *DrawService) fetchPaiLie5(issue string) (*models.DrawResult, error) {
 	}, nil
 }
 
-// fetchBatchPaiLie5 批量抓取排列5
+// fetchBatchPaiLie5 批量抓取排列5（主源体彩官网，失败降级慧鸟）
 func (s *DrawService) fetchBatchPaiLie5(startDate, endDate string, count int) ([]*models.DrawResult, error) {
+	if count <= 0 {
+		count = 20
+	}
+	items, err := fetchSportteryHistory("350133", count)
+	if err == nil {
+		var results []*models.DrawResult
+		for _, item := range items {
+			draw, itemErr := sportteryItemToDraw(item, models.PaiLie5, 5)
+			if itemErr != nil {
+				continue
+			}
+			results = append(results, draw)
+		}
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+	return s.fetchBatchPaiLie5Huiniao(startDate, endDate, count)
+}
+
+// fetchBatchPaiLie5Huiniao 批量抓取排列5（慧鸟降级方案）
+func (s *DrawService) fetchBatchPaiLie5Huiniao(startDate, endDate string, count int) ([]*models.DrawResult, error) {
 	url := fmt.Sprintf("http://api.huiniao.top/interface/home/lotteryHistory?type=pl5&page=1&limit=%d", count)
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -916,6 +1213,18 @@ type PurchaseService struct{}
 
 func (s *PurchaseService) CreatePurchase(p *models.PurchaseRecord) error {
 	return database.DB.Create(p).Error
+}
+
+// CreatePurchasesBatch 批量创建购买记录，整体在一个事务内，任一条失败全部回滚。
+func (s *PurchaseService) CreatePurchasesBatch(records []*models.PurchaseRecord) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		for _, p := range records {
+			if err := tx.Create(p).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (s *PurchaseService) GetPurchases(userID uint, lotteryType, status string, page, size int) ([]models.PurchaseRecord, int64, error) {

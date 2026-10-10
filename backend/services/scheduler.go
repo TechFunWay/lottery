@@ -163,8 +163,10 @@ func (s *SchedulerService) FetchLatestDraws() map[string]FetchResult {
 	lotteryTypes := []models.LotteryType{
 		models.ShuangSeQiu,
 		models.DaLeTou,
-		models.QiLeCai,
+		models.FuCai3D,
+		models.PaiLie3,
 		models.PaiLie5,
+		models.QiLeCai,
 	}
 
 	results := make(map[string]FetchResult)

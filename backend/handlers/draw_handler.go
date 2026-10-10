@@ -4,7 +4,6 @@ import (
 	"lottery-backend/logger"
 	"lottery-backend/models"
 	"lottery-backend/services"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -111,6 +110,8 @@ func FetchDraw(c *gin.Context) {
 }
 
 // FetchBatchDraws POST /api/draws/fetch-batch
+// 抓取在后台 goroutine 执行、请求立即返回：飞牛网关会掐断等待外网抓取的慢请求
+// （返回空响应，前端误以为成功 0 条），同步等待在这类环境不可用。
 func FetchBatchDraws(c *gin.Context) {
 	type BatchFetchRequest struct {
 		LotteryType string `json:"lottery_type" binding:"required"`
@@ -133,37 +134,36 @@ func FetchBatchDraws(c *gin.Context) {
 	}
 
 	lotteryType := models.LotteryType(req.LotteryType)
-	draws, err := drawService.FetchBatchDrawResults(lotteryType, req.StartDate, req.EndDate, req.Count)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "批量抓取失败: " + err.Error()})
-		return
-	}
 
-	// 保存并统计
-	savedCount := 0
-	existCount := 0
-	for _, draw := range draws {
-		// 直接创建，CreateDrawResult 内部会处理已存在的情况
-		if err := drawService.CreateDrawResult(draw); err != nil {
-			if strings.Contains(err.Error(), "已存在") {
-				existCount++
-			} else {
-				logger.GetSugarLogger().Errorf("保存开奖结果失败: %v", err)
-			}
-			continue
+	go func() {
+		draws, err := drawService.FetchBatchDrawResults(lotteryType, req.StartDate, req.EndDate, req.Count)
+		if err != nil {
+			logger.GetSugarLogger().Errorf("后台批量抓取 %s 失败: %v", lotteryType, err)
+			return
 		}
-		savedCount++
-		go winningService.CheckAndSaveWinnings(draw.ID)
-	}
 
-	msg := fmt.Sprintf("成功获取 %d 条开奖记录，新增 %d 条", len(draws), savedCount)
-	if existCount > 0 {
-		msg += fmt.Sprintf("，已存在 %d 条", existCount)
-	}
+		savedCount := 0
+		existCount := 0
+		for _, draw := range draws {
+			// 直接创建，CreateDrawResult 内部会处理已存在的情况
+			if err := drawService.CreateDrawResult(draw); err != nil {
+				if strings.Contains(err.Error(), "已存在") {
+					existCount++
+				} else {
+					logger.GetSugarLogger().Errorf("保存开奖结果失败: %v", err)
+				}
+				continue
+			}
+			savedCount++
+			go winningService.CheckAndSaveWinnings(draw.ID)
+		}
+		logger.GetSugarLogger().Infof("后台批量抓取 %s 完成：获取 %d 条，新增 %d 条，已存在 %d 条",
+			lotteryType, len(draws), savedCount, existCount)
+	}()
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": msg,
-		"data":    gin.H{"count": savedCount, "exist_count": existCount, "total": len(draws)},
+		"message": "抓取任务已在后台开始，稍后刷新列表查看结果",
+		"data":    gin.H{"started": true},
 	})
 }
 

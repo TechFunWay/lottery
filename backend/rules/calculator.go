@@ -442,6 +442,16 @@ type PaiLie5Numbers struct {
 	Numbers []int `json:"numbers"` // 5个数字 0-9
 }
 
+// FuCai3DNumbers 福彩3D号码
+type FuCai3DNumbers struct {
+	Numbers []int `json:"numbers"` // 3个数字 0-9
+}
+
+// PaiLie3Numbers 排列3号码
+type PaiLie3Numbers struct {
+	Numbers []int `json:"numbers"` // 3个数字 0-9
+}
+
 var qiLeCaiPrizes = []struct {
 	main, special int
 	level         int

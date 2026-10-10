@@ -13,6 +13,9 @@ const testing = ref(false)
 const lastTest = ref<FootballTestResult | null>(null)
 const message = ref<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
 
+// 清除 Key 的确认弹窗（替代原生 confirm）
+const clearConfirm = ref(false)
+
 const sourceLabel = computed(() => {
   if (!status.value) return ''
   switch (status.value.source) {
@@ -84,8 +87,12 @@ const handleTest = async () => {
   }
 }
 
-const handleClear = async () => {
-  if (!confirm('确定要清除你自配的 Key 吗?清除后将降级使用管理员/环境变量配置。')) return
+const handleClear = () => {
+  clearConfirm.value = true
+}
+
+const doClear = async () => {
+  clearConfirm.value = false
   clearing.value = true
   try {
     const res = await footballConfigApi.setMyKey('')
@@ -228,6 +235,36 @@ onMounted(loadStatus)
           <li>粘贴到上方输入框,点击「测试」验证,「保存」即可</li>
         </ol>
         <p class="text-xs text-blue-700 mt-2">免费版: <b>100 次/天</b> · 10 次/分,够个人日常使用。多人共享时建议每人配自己的 Key 以避免限流。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 清除 Key 确认弹窗（替代原生 confirm） -->
+  <div v-if="clearConfirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="clearConfirm = false"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-slide-up">
+      <div class="p-6 text-center">
+        <div class="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-slate-800 mb-2">清除自配 Key</h3>
+        <p class="text-slate-600 text-sm">确定要清除你自配的 Key 吗？清除后将降级使用管理员/环境变量配置。</p>
+      </div>
+      <div class="border-t border-slate-100 px-6 py-4 flex gap-3">
+        <button
+          @click="clearConfirm = false"
+          class="flex-1 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors cursor-pointer"
+        >
+          取消
+        </button>
+        <button
+          @click="doClear"
+          class="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors cursor-pointer"
+        >
+          确认清除
+        </button>
       </div>
     </div>
   </div>

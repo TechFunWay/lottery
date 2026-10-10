@@ -52,7 +52,14 @@ const closeMenu = () => {
   showUserMenu.value = false
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  // 先让服务端结束会话：网关域上它会落一条「别再自动认人」的标记并清会话 cookie；
+  // 只清 localStorage 的话，下一个请求会被网关注入的 NAS 身份重新认回来（退不掉）。
+  try {
+    await authApi.logout()
+  } catch {
+    /* 会话已失效也照常清本地状态 */
+  }
   localStorage.removeItem('token')
   localStorage.removeItem('user')
   currentUser.value = null
@@ -174,23 +181,25 @@ onUnmounted(() => {
         </div>
 
         <!-- Desktop Navigation -->
-        <div class="hidden md:flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
-          <router-link
-            v-for="item in navItems"
-            :key="item.path"
-            :to="item.path"
-            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
-            :class="isActive(item.path)
-              ? 'bg-blue-50 text-blue-600 shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'"
-          >
-            <component :is="item.icon" class="w-3.5 h-3.5" />
-            {{ item.name }}
-          </router-link>
+        <div class="hidden md:flex items-center gap-0.5 min-w-0 ml-3">
+          <div class="flex items-center gap-0.5 min-w-0 overflow-x-auto scrollbar-hide">
+            <router-link
+              v-for="item in navItems"
+              :key="item.path"
+              :to="item.path"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
+              :class="isActive(item.path)
+                ? 'bg-blue-50 text-blue-600 shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'"
+            >
+              <component :is="item.icon" class="w-3.5 h-3.5" />
+              {{ item.name }}
+            </router-link>
+          </div>
 
           <button
             @click="showSupportModal = true"
-            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 whitespace-nowrap transition-all duration-200 cursor-pointer"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 whitespace-nowrap transition-all duration-200 cursor-pointer shrink-0"
           >
             <Heart class="w-3.5 h-3.5 text-rose-500" />
             支持
@@ -209,7 +218,7 @@ onUnmounted(() => {
             <!-- Dropdown -->
             <div
               v-if="showUserMenu"
-              class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-2"
+              class="absolute right-0 z-10 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-2"
             >
               <div class="px-4 py-2 border-b border-slate-100">
                 <p class="text-sm font-medium text-slate-800">{{ currentUser?.username }}</p>

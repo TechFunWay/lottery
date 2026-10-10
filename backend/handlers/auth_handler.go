@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"lottery-backend/logger"
+	"lottery-backend/middleware"
 	"lottery-backend/models"
 	"lottery-backend/services"
 	"net/http"
@@ -56,6 +58,8 @@ func Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	clearGatewaySuppression(user.ID)
+	middleware.SetAppSessionCookie(c, token)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"data": gin.H{
@@ -79,6 +83,8 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
+	clearGatewaySuppression(user.ID)
+	middleware.SetAppSessionCookie(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
@@ -87,6 +93,30 @@ func Login(c *gin.Context) {
 		},
 		"message": "登录成功",
 	})
+}
+
+// Logout POST /api/auth/logout
+// 结束「应用自己的」登录态：清会话 cookie（cookie 不分端口，网关域与直连端口共用
+// 一张），并给该用户落一条持久化抑制标记——网关域上只清前端是退不掉的，下一个请求
+// 就会被网关注入的 NAS 身份重新认回来。用户随后显式登录（账密或飞牛授权）即解除。
+func Logout(c *gin.Context) {
+	user, _ := middleware.ResolveUser(c)
+	if user != nil {
+		if err := middleware.SuppressGatewaySession(user.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "退出登录失败，请稍后重试"})
+			return
+		}
+	}
+	middleware.ClearAppSessionCookie(c)
+	c.JSON(http.StatusOK, gin.H{"message": "已退出登录"})
+}
+
+// clearGatewaySuppression 显式登录成功后解除网关隐式登录的抑制。失败只记日志：
+// 抑制记录本身不影响应用自己的 JWT 会话，网关域刷新会被兜底认人挡一次而已。
+func clearGatewaySuppression(userID uint) {
+	if err := middleware.ClearSessionSuppression(userID); err != nil {
+		logger.GetSugarLogger().Warnf("⚠️  解除网关登录抑制失败: %v", err)
+	}
 }
 
 // GetCurrentUser GET /api/auth/me

@@ -33,6 +33,9 @@ const generating = ref(false)
 const issueNumber = ref('')
 const drawRecords = ref<any[]>([])
 
+// 幸运号：无历史期号时的内联二次确认提示条
+const luckyNewIssueConfirm = ref(false)
+
 // 加载开奖记录
 const loadDrawRecords = async () => {
   const res = await drawApi.list({ size: 500 }).catch(() => null)
@@ -40,7 +43,8 @@ const loadDrawRecords = async () => {
 }
 
 // 验证期号：必须是未来的期号（大于等于当前最大期号）
-const validateIssueNumber = (): boolean => {
+// 无历史记录时返回 'new-issue'，由弹窗内的确认提示条二次确认（禁止原生 confirm）
+const validateIssueNumber = (): boolean | 'new-issue' => {
   const inputIssue = issueNumber.value.trim()
   if (!inputIssue) {
     showToast('error', '请输入期号')
@@ -55,7 +59,7 @@ const validateIssueNumber = (): boolean => {
 
   if (currentTypeRecords.length === 0) {
     // 没有历史期号，需要用户手动确认（可能是新一期的第一注）
-    return confirm('未找到当前期号记录，确定要添加到新期号吗？')
+    return 'new-issue'
   }
 
   // 获取最大期号
@@ -125,12 +129,19 @@ const openLuckyModal = async () => {
 }
 
 // 确认添加购买记录
-const confirmAddPurchase = async () => {
+const confirmAddPurchase = async (forceNewIssue = false) => {
   if (!generatedNumbers.value || !issueNumber.value.trim()) return
   // 验证期号必须是未来期号
-  if (!validateIssueNumber()) {
+  const verdict = validateIssueNumber()
+  if (verdict === 'new-issue') {
+    if (!forceNewIssue) {
+      luckyNewIssueConfirm.value = true
+      return
+    }
+  } else if (!verdict) {
     return
   }
+  luckyNewIssueConfirm.value = false
   try {
     await purchaseApi.create({
       lottery_type: selectedLotteryType.value,
@@ -435,6 +446,27 @@ const prizeColor = (level: number) => {
               placeholder="请输入期号"
               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-amber-400"
             />
+            <!-- 无历史期号时的内联确认提示（替代原生 confirm） -->
+            <div v-if="luckyNewIssueConfirm" class="mt-2 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+              </svg>
+              <div class="flex-1 text-xs text-amber-700">
+                <p>未找到当前期号的开奖记录，将作为新期号添加。</p>
+                <div class="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    @click="confirmAddPurchase(true)"
+                    class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors cursor-pointer"
+                  >确定添加</button>
+                  <button
+                    type="button"
+                    @click="luckyNewIssueConfirm = false"
+                    class="px-3 py-1 text-slate-500 hover:bg-slate-100 rounded-lg font-medium transition-colors cursor-pointer"
+                  >再想想</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 生成的号码 -->
@@ -475,7 +507,7 @@ const prizeColor = (level: number) => {
             取消
           </button>
           <button
-            @click="confirmAddPurchase"
+            @click="confirmAddPurchase()"
             class="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors cursor-pointer"
           >
             添加到购买记录

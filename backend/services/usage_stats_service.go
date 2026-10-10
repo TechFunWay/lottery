@@ -26,7 +26,6 @@ type UsageStatsService struct {
 	appName    string
 	os         string
 	arch       string
-	hostname   string
 	deviceType string // 设备类型（fnos/docker等）
 	enabled    bool
 	stopChan   chan struct{}
@@ -41,7 +40,7 @@ type StatsRequest struct {
 	DeviceType string `json:"device_type,omitempty"` // 设备类型（fnos/docker等）
 	OS         string `json:"os,omitempty"`          // 操作系统
 	Arch       string `json:"arch,omitempty"`        // 架构
-	Hostname   string `json:"hostname,omitempty"`    // 主机名
+	Event      string `json:"event,omitempty"`       // 事件类型：心跳为空，赞赏点击为 donate_support
 }
 
 func (s *UsageStatsService) SetDeviceType(deviceType string) {
@@ -58,9 +57,6 @@ func (s *UsageStatsService) GetDeviceType() string {
 
 // NewUsageStatsService 创建使用统计服务
 func NewUsageStatsService(version string) *UsageStatsService {
-	// 获取系统信息
-	hostname, _ := os.Hostname()
-
 	// 检查是否禁用统计
 	enabled := os.Getenv("DISABLE_STATS") != "true"
 
@@ -69,7 +65,6 @@ func NewUsageStatsService(version string) *UsageStatsService {
 		version:  version,
 		os:       runtime.GOOS,
 		arch:     runtime.GOARCH,
-		hostname: hostname,
 		enabled:  enabled,
 		stopChan: make(chan struct{}),
 	}
@@ -144,20 +139,14 @@ func (s *UsageStatsService) saveDeviceID(dataDir, deviceID string) error {
 	return os.WriteFile(deviceIDFile, []byte(deviceID), 0644)
 }
 
-// generateDeviceID 生成设备唯一标识码
+// generateDeviceID 生成设备唯一标识码（不含主机名等隐私原文，只存哈希）
 func (s *UsageStatsService) generateDeviceID() (string, error) {
 	var systemInfo strings.Builder
 
 	// 1. 操作系统和架构
 	fmt.Fprintf(&systemInfo, "OS:%s Arch:%s", runtime.GOOS, runtime.GOARCH)
 
-	// 2. 主机名
-	hostname, err := os.Hostname()
-	if err == nil {
-		fmt.Fprintf(&systemInfo, " Hostname:%s", hostname)
-	}
-
-	// 3. 根据操作系统获取更多系统信息
+	// 2. 根据操作系统获取更多系统信息
 	switch runtime.GOOS {
 	case "darwin": // macOS
 		if serial, err := s.getMacSerial(); err == nil {
@@ -176,7 +165,7 @@ func (s *UsageStatsService) generateDeviceID() (string, error) {
 		}
 	}
 
-	// 4. 生成 MD5 哈希作为设备ID
+	// 3. 生成 MD5 哈希作为设备ID
 	hash := md5.Sum([]byte(systemInfo.String()))
 	return hex.EncodeToString(hash[:]), nil
 }
@@ -251,7 +240,7 @@ func (s *UsageStatsService) Start() {
 	}
 
 	// 立即执行一次
-	go s.sendStats()
+	go s.sendStats("")
 
 	// 启动定时器，每天不定时执行一次
 	go s.dailyScheduler()
@@ -284,7 +273,7 @@ func (s *UsageStatsService) dailyScheduler() {
 		select {
 		case <-timer.C:
 			// 时间到了，发送统计
-			go s.sendStats()
+			go s.sendStats("")
 		case <-s.stopChan:
 			// 停止信号，退出循环
 			timer.Stop() // 停止 timer，防止泄漏
@@ -293,8 +282,17 @@ func (s *UsageStatsService) dailyScheduler() {
 	}
 }
 
-// sendStats 发送统计数据
-func (s *UsageStatsService) sendStats() {
+// SendEvent 发送一次事件上报（如赞赏点击 donate_support），
+// 同步执行并返回是否成功（统计服务返回非 2xx 视为失败）
+func (s *UsageStatsService) SendEvent(event string) bool {
+	if s.apiURL == "" || !s.enabled {
+		return false
+	}
+	return s.sendStats(event)
+}
+
+// sendStats 发送统计数据，返回是否成功
+func (s *UsageStatsService) sendStats(event string) bool {
 	// 使用读锁，防止读取时 apiURL 被修改
 	s.mu.RLock()
 	apiURL := s.apiURL
@@ -303,26 +301,25 @@ func (s *UsageStatsService) sendStats() {
 	appName := s.appName
 	osType := s.os
 	arch := s.arch
-	hostname := s.hostname
 	s.mu.RUnlock()
 
 	if apiURL == "" {
-		return
+		return false
 	}
 
 	req := StatsRequest{
-		AppName:    appName,   // 应用名称
-		Version:    version,   // 应用版本
-		DeviceID:   deviceID,  // 设备唯一标识
+		AppName:    appName,           // 应用名称
+		Version:    version,           // 应用版本
+		DeviceID:   deviceID,          // 设备唯一标识
 		DeviceType: s.GetDeviceType(), // 设备类型（fnos/docker等）
-		OS:         osType,    // 操作系统类型（darwin/linux/windows）
-		Arch:       arch,      // CPU架构（amd64/arm64）
-		Hostname:   hostname,  // 主机名
+		OS:         osType,            // 操作系统类型（darwin/linux/windows）
+		Arch:       arch,              // CPU架构（amd64/arm64）
+		Event:      event,             // 事件类型（心跳为空）
 	}
 
 	jsonData, err := json.Marshal(req)
 	if err != nil {
-		return // 静默失败
+		return false // 静默失败
 	}
 
 	// 创建 HTTP 请求，设置10秒超时
@@ -332,15 +329,13 @@ func (s *UsageStatsService) sendStats() {
 
 	resp, err := client.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return // 静默失败
+		return false // 静默失败
 	}
 
-	// 确保关闭响应体
-	if resp != nil {
-		// 读取并丢弃响应体，确保连接可以被复用
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}
+	// 读取并丢弃响应体，确保连接可以被复用
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 
-	// 不处理返回结果，不记录日志
+	// 统计服务返回非 2xx 视为发送失败（http.Post 不把 4xx/5xx 当作 error）
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
