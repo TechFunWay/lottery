@@ -192,6 +192,7 @@ const handleInput = (index: number, type: 'main' | 'blue', event: Event) => {
   const val = parseInt(rawVal)
   if (isNaN(val)) {
     errors.value = ['请输入有效数字']
+    input.value = ''
     return
   }
 
@@ -201,6 +202,7 @@ const handleInput = (index: number, type: 'main' | 'blue', event: Event) => {
 
   if (val < min || val > max) {
     errors.value = [`${val} 超出范围 ${min}-${max}`]
+    input.value = ''
     return
   }
 
@@ -226,6 +228,36 @@ const handleEnter = (index: number, type: 'main' | 'blue', event: Event) => {
   const input = event.target as HTMLInputElement
   if (input.value.trim() === '') return
   focusNext(index, type)
+}
+
+// 方向键导航
+const handleKeydown = (index: number, type: 'main' | 'blue', event: KeyboardEvent) => {
+  const input = event.target as HTMLInputElement
+  if (event.key === 'ArrowLeft') {
+    // 只有光标在最前面时才跳转到前一个输入框
+    if (input.selectionStart === 0) {
+      event.preventDefault()
+      if (type === 'main' && index > 0) {
+        mainInputs.value[index - 1]?.focus()
+      } else if (type === 'blue' && index > 0) {
+        blueInputs.value[index - 1]?.focus()
+      } else if (type === 'blue' && index === 0 && mainNumbers.value.length > 0) {
+        mainInputs.value[mainNumbers.value.length - 1]?.focus()
+      }
+    }
+  } else if (event.key === 'ArrowRight') {
+    // 只有光标在最后面时才跳转到后一个输入框
+    if (input.selectionStart === input.value.length) {
+      event.preventDefault()
+      if (type === 'main' && index < mainNumbers.value.length - 1) {
+        mainInputs.value[index + 1]?.focus()
+      } else if (type === 'main' && index === mainNumbers.value.length - 1 && blueNumbers.value.length > 0) {
+        blueInputs.value[0]?.focus()
+      } else if (type === 'blue' && index < blueNumbers.value.length - 1) {
+        blueInputs.value[index + 1]?.focus()
+      }
+    }
+  }
 }
 
 const handleBlur = (index: number, type: 'main' | 'blue', event: Event) => {
@@ -385,6 +417,12 @@ const mainMin = computed(() => config.value?.redRange.min ?? 0)
 const blueMax = computed(() => config.value?.blueRange?.max ?? 99)
 const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
 
+// 补零显示：个位数显示为两位（如 5 → 05）
+const paddedValue = (val: number | null): string => {
+  if (val === null) return ''
+  return String(val).padStart(2, '0')
+}
+
 // 是否支持复式
 const supportsMultiple = computed(() => props.lotteryType === '双色球' || props.lotteryType === '大乐透')
 
@@ -456,13 +494,14 @@ const clearAll = () => {
         >
           <input
             :ref="(el) => setMainRef(el, i)"
-            type="number"
-            :value="num ?? ''"
-            :min="mainMin"
-            :max="mainMax"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            :value="paddedValue(num)"
             placeholder="--"
             @input="handleInput(i, 'main', $event)"
             @keydown.enter.prevent="handleEnter(i, 'main', $event)"
+            @keydown="handleKeydown(i, 'main', $event)"
             @blur="handleBlur(i, 'main', $event)"
             class="w-14 h-12 text-center text-sm font-bold rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none transition-all
               bg-gradient-to-b from-red-50 to-white text-red-600
@@ -505,13 +544,14 @@ const clearAll = () => {
         >
           <input
             :ref="(el) => setBlueRef(el, i)"
-            type="number"
-            :value="num ?? ''"
-            :min="blueMin"
-            :max="blueMax"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            :value="paddedValue(num)"
             placeholder="--"
             @input="handleInput(i, 'blue', $event)"
             @keydown.enter.prevent="handleEnter(i, 'blue', $event)"
+            @keydown="handleKeydown(i, 'blue', $event)"
             @blur="handleBlur(i, 'blue', $event)"
             class="w-14 h-12 text-center text-sm font-bold rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none transition-all
               bg-gradient-to-b from-blue-50 to-white text-blue-600
