@@ -1,0 +1,11 @@
+# 忽略数据库文件
+*.db
+*.db-shm
+*.db-wal
+
+# 忽略可执行文件
+caipiao-server
+caipiao-backend
+
+# 忽略数据目录
+/data/

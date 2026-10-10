@@ -1,0 +1,31 @@
+#!/bin/bash
+
+### This script is called after the user uninstalls the application.
+
+# 获取用户在向导中的选择
+DATA_ACTION="$wizard_data_action"
+
+# 根据用户选择执行相应逻辑
+if [ "${DATA_ACTION}" = "delete" ]; then
+  # 检查文件/目录是否存在后再删除
+  if [ -f "$TRIM_DATA_SHARE_PATHS/db/database.db" ]; then
+      rm "$TRIM_DATA_SHARE_PATHS/db/database.db"
+      echo "database.db文件已删除"
+  fi
+  if [ -d "$TRIM_DATA_SHARE_PATHS/db" ]; then
+      rm -rf "$TRIM_DATA_SHARE_PATHS/db"
+      echo "db目录已删除"
+  fi
+  if [ -d "$TRIM_DATA_SHARE_PATHS/logs" ]; then
+      rm -rf "$TRIM_DATA_SHARE_PATHS/logs"
+      echo "logs目录已删除"
+  fi
+  if [ -d "$TRIM_DATA_SHARE_PATHS" ]; then
+      rm -rf "$TRIM_DATA_SHARE_PATHS"
+      echo "目录已删除"
+  fi
+else
+    echo "保留数据..."
+fi
+
+exit 0
