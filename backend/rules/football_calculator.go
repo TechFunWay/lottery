@@ -1,9 +1,9 @@
 package rules
 
 import (
-	"lottery-backend/models"
 	"encoding/json"
 	"fmt"
+	"lottery-backend/models"
 )
 
 type FootballSelectionResult struct {
@@ -15,9 +15,9 @@ type FootballSelectionResult struct {
 }
 
 type FootballBetResult struct {
-	Hit      bool                      `json:"hit"`
-	WinAmount float64                  `json:"win_amount"`
-	Details  []FootballSelectionResult `json:"details"`
+	Hit       bool                      `json:"hit"`
+	WinAmount float64                   `json:"win_amount"`
+	Details   []FootballSelectionResult `json:"details"`
 }
 
 func CalculateWinDrawLoss(homeScore, awayScore int) string {
@@ -112,10 +112,18 @@ func CalculateFootballBet(selectionsJSON string, matches []models.FootballMatch)
 	}
 
 	var details []FootballSelectionResult
-	allHit := true
-	totalOdds := 1.0
+	// 同一场比赛允许选择多个结果（复式）。同场选项是“或”的关系，
+	// 不同场次才是串关的“且”关系。每场命中选项的赔率之和再参与串乘，
+	// 等价于把复式拆成所有单独的串关组合后汇总奖金。
+	matchHitOdds := make(map[string]float64)
+	matchOrder := make([]string, 0)
+	seenMatch := make(map[string]bool)
 
 	for _, sel := range selections {
+		if !seenMatch[sel.MatchID] {
+			seenMatch[sel.MatchID] = true
+			matchOrder = append(matchOrder, sel.MatchID)
+		}
 		match, ok := matchMap[sel.MatchID]
 		if !ok {
 			details = append(details, FootballSelectionResult{
@@ -125,7 +133,6 @@ func CalculateFootballBet(selectionsJSON string, matches []models.FootballMatch)
 				Selection: sel.Selection,
 				Odds:      sel.Odds,
 			})
-			allHit = false
 			continue
 		}
 
@@ -138,19 +145,26 @@ func CalculateFootballBet(selectionsJSON string, matches []models.FootballMatch)
 			Odds:      sel.Odds,
 		})
 
-		if !hit {
-			allHit = false
-		} else {
-			if sel.Odds > 0 {
-				totalOdds *= sel.Odds
-			}
+		if hit && sel.Odds > 0 {
+			matchHitOdds[sel.MatchID] += sel.Odds
 		}
 	}
 
+	allHit := len(matchOrder) > 0
+	totalOdds := 1.0
+	for _, matchID := range matchOrder {
+		odds := matchHitOdds[matchID]
+		if odds <= 0 {
+			allHit = false
+			break
+		}
+		totalOdds *= odds
+	}
+
 	result := FootballBetResult{
-		Hit:      allHit,
+		Hit:       allHit,
 		WinAmount: 0,
-		Details:  details,
+		Details:   details,
 	}
 
 	if allHit && totalOdds > 0 {

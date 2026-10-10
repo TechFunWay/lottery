@@ -1,14 +1,14 @@
 package services
 
 import (
-	"lottery-backend/database"
-	"lottery-backend/logger"
-	"lottery-backend/models"
-	"lottery-backend/rules"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"lottery-backend/database"
+	"lottery-backend/logger"
+	"lottery-backend/models"
+	"lottery-backend/rules"
 	"net/http"
 	"strconv"
 	"time"
@@ -116,7 +116,7 @@ type sportteryScheduleResp struct {
 	ErrorMessage string `json:"errorMessage"`
 	Value        struct {
 		MatchInfoList []struct {
-			BusinessDate string             `json:"businessDate"`
+			BusinessDate string              `json:"businessDate"`
 			SubMatchList []sportterySubMatch `json:"subMatchList"`
 		} `json:"matchInfoList"`
 	} `json:"value"`
@@ -167,7 +167,17 @@ type apiFootballFixture struct {
 }
 
 type apiFootballFixturesResp struct {
+	Errors   json.RawMessage      `json:"errors"`
+	Results  int                  `json:"results"`
 	Response []apiFootballFixture `json:"response"`
+}
+
+func apiFootballError(raw json.RawMessage) error {
+	trimmed := string(raw)
+	if trimmed == "" || trimmed == "null" || trimmed == "[]" || trimmed == "{}" {
+		return nil
+	}
+	return fmt.Errorf("API-Football 返回错误: %s", trimmed)
 }
 
 // sporttery 赛程接口:实测必须伪装 iPhone Safari UA + sporttery.cn Referer 才能过阿里云 WAF。
@@ -235,7 +245,7 @@ func (s *FootballService) FetchMatches() ([]*models.FootballMatch, error) {
 func (s *FootballService) FetchMatchResults(userID uint) ([]*models.FootballMatch, error) {
 	apiKey, source := configService.ResolveAPIFootballKey(userID)
 	if apiKey == "" {
-		logger.GetSugarLogger().Infof("⚽ 用户 #%d 未配置 API_FOOTBALL_KEY(per-user / admin / env 均空),赛果自动抓取暂不可用", userID)
+		logger.GetSugarLogger().Infof("⚽ 用户 #%d 未配置 API_FOOTBALL_KEY(per-user / admin / env / builtin 均空),赛果自动抓取暂不可用", userID)
 		return nil, nil
 	}
 	logger.GetSugarLogger().Debugf("⚽ 使用 %s 来源的 API-Football Key", source)
@@ -250,6 +260,9 @@ func (s *FootballService) FetchMatchResults(userID uint) ([]*models.FootballMatc
 	var resp apiFootballFixturesResp
 	if err := httpGetJSON(url, headers, 12*time.Second, &resp, false); err != nil {
 		return nil, fmt.Errorf("api-football 赛果接口不可达: %w", err)
+	}
+	if err := apiFootballError(resp.Errors); err != nil {
+		return nil, err
 	}
 
 	if len(resp.Response) == 0 {
@@ -280,9 +293,9 @@ func (s *FootballService) FetchMatchResults(userID uint) ([]*models.FootballMatc
 
 		var existing models.FootballMatch
 		err = database.DB.Where(
-			"home_team = ? AND away_team = ? AND status IN (?, ?) AND match_time BETWEEN ? AND ?",
+			"home_team = ? AND away_team = ? AND status IN (?, ?, ?) AND match_time BETWEEN ? AND ?",
 			homeCN, awayCN,
-			models.MatchNotStarted, models.MatchInProgress,
+			models.MatchNotStarted, models.MatchInProgress, models.MatchFinished,
 			matchTime.Add(-24*time.Hour), matchTime.Add(24*time.Hour),
 		).First(&existing).Error
 		if err != nil {
@@ -376,13 +389,19 @@ func (s *FootballService) CheckBetWinning(bet *models.FootballBet, matches []mod
 
 		if allFinished {
 			bet.Status = models.BetLost
+			bet.WinAmount = 0
+		} else {
+			bet.Status = models.BetPending
+			bet.WinAmount = 0
 		}
 	}
 }
 
 func (s *FootballService) RecheckAllBets() error {
 	var bets []models.FootballBet
-	if err := database.DB.Where("status = ?", models.BetPending).Find(&bets).Error; err != nil {
+	// 重新检查必须覆盖历史上被误判为未中奖的记录，才能在规则修复或
+	// 比分更正后自动纠正状态，而不是只处理“待开奖”。
+	if err := database.DB.Find(&bets).Error; err != nil {
 		return err
 	}
 
@@ -420,11 +439,11 @@ func (s *FootballService) GetFootballOverview(userID uint) (map[string]interface
 	}
 
 	return map[string]interface{}{
-		"total_bets":     totalBets,
-		"total_amount":   totalAmount,
-		"total_win":      totalWinAmount,
-		"net_profit":     totalWinAmount - totalAmount,
-		"win_count":      winCount,
-		"win_rate":       winRate,
+		"total_bets":   totalBets,
+		"total_amount": totalAmount,
+		"total_win":    totalWinAmount,
+		"net_profit":   totalWinAmount - totalAmount,
+		"win_count":    winCount,
+		"win_rate":     winRate,
 	}, nil
 }

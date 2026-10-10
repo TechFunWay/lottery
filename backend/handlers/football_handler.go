@@ -14,18 +14,18 @@ import (
 var footballService = &services.FootballService{}
 
 type CreateFootballMatchRequest struct {
-	MatchID       string `json:"match_id" binding:"required"`
-	IssueNumber   string `json:"issue_number"`
-	League        string `json:"league"`
-	HomeTeam      string `json:"home_team" binding:"required"`
-	AwayTeam      string `json:"away_team" binding:"required"`
-	MatchTime     string `json:"match_time" binding:"required"`
-	HomeScore     int    `json:"home_score"`
-	AwayScore     int    `json:"away_score"`
-	HalfHomeScore int    `json:"half_home_score"`
-	HalfAwayScore int    `json:"half_away_score"`
+	MatchID       string  `json:"match_id" binding:"required"`
+	IssueNumber   string  `json:"issue_number"`
+	League        string  `json:"league"`
+	HomeTeam      string  `json:"home_team" binding:"required"`
+	AwayTeam      string  `json:"away_team" binding:"required"`
+	MatchTime     string  `json:"match_time" binding:"required"`
+	HomeScore     int     `json:"home_score"`
+	AwayScore     int     `json:"away_score"`
+	HalfHomeScore int     `json:"half_home_score"`
+	HalfAwayScore int     `json:"half_away_score"`
 	Handicap      float64 `json:"handicap"`
-	Status        string `json:"status"`
+	Status        string  `json:"status"`
 }
 
 func CreateFootballMatch(c *gin.Context) {
@@ -414,9 +414,10 @@ func GetMyFootballConfig(c *gin.Context) {
 	key, source := configService.ResolveAPIFootballKey(uid.(uint))
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"configured": key != "",
-			"source":     string(source),
-			"masked_key": services.MaskAPIFootballKey(key),
+			"configured":       key != "",
+			"source":           string(source),
+			"masked_key":       services.MaskAPIFootballKey(key),
+			"registration_url": apiFootballRegistrationURL,
 		},
 	})
 }
