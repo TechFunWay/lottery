@@ -23,7 +23,7 @@ import (
 
 // 版本信息（编译时注入）
 var (
-	Version   = "v1.2.0"
+	Version   = "v1.3.0"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
@@ -282,6 +282,7 @@ func main() {
 			authorized.GET("/draws/fetch", handlers.FetchDraw)
 			authorized.POST("/draws/fetch-batch", handlers.FetchBatchDraws)
 			authorized.POST("/draws/fetch-auto", handlers.FetchAutoDraws)
+			authorized.GET("/draws/analysis", handlers.GetDrawAnalysis)
 
 			// 中奖记录
 			authorized.GET("/winnings", handlers.GetWinnings)

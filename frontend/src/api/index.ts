@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview, FootballConfigStatus, FootballTestResult } from '../types'
+import type { PurchaseRecord, DrawResult, OverviewStats, PrizeDistribution, TrendData, WinningRecord, User, AuthResponse, SystemConfig, PublicConfigs, FootballMatch, FootballBet, FootballOverview, FootballConfigStatus, FootballTestResult, DrawAnalysis } from '../types'
 
 // API 基础路径配置
 // 开发环境: http://localhost:8902/api
@@ -101,6 +101,8 @@ export const drawApi = {
     api.get('/draws/fetch', { params: { lottery_type, issue } }),
   fetchBatch: (params: { lottery_type: string; start_date?: string; end_date?: string; count?: number }) =>
     api.post('/draws/fetch-batch', params),
+  analysis: (lottery_type: string, count: number): Promise<{ data: DrawAnalysis }> =>
+    api.get('/draws/analysis', { params: { lottery_type, count } }),
 }
 
 // ===== 中奖记录 API =====

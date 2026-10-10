@@ -59,6 +59,7 @@ type DrawResult struct {
 	DrawDate    time.Time   `json:"draw_date" gorm:"not null"`
 	Numbers     string      `json:"numbers" gorm:"not null"` // JSON 格式存储开奖号码
 	Source      string      `json:"source" gorm:"default:'manual'"` // manual/auto
+	FuYunAward  bool        `json:"fu_yun_award" gorm:"default:false"` // 双色球福运奖：奖池≥15亿派奖期，中3红奖5元（按期手动标记）
 }
 
 // WinningRecord 中奖记录

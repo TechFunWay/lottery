@@ -46,6 +46,12 @@ const router = createRouter({
       meta: { title: '统计分析', requiresAuth: true }
     },
     {
+      path: '/analysis',
+      name: 'analysis',
+      component: () => import('../views/AnalysisView.vue'),
+      meta: { title: '号码分析', requiresAuth: true }
+    },
+    {
       path: '/football',
       name: 'football',
       component: () => import('../views/FootballView.vue'),

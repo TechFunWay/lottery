@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"lottery-backend/logger"
 	"lottery-backend/models"
 	"lottery-backend/services"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +14,7 @@ import (
 )
 
 var drawService = &services.DrawService{}
+var analysisService = &services.AnalysisService{}
 var SchedulerService *services.SchedulerService
 
 type CreateDrawRequest struct {
@@ -21,6 +22,7 @@ type CreateDrawRequest struct {
 	IssueNumber string `json:"issue_number" binding:"required"`
 	DrawDate    string `json:"draw_date" binding:"required"`
 	Numbers     string `json:"numbers" binding:"required"`
+	FuYunAward  bool   `json:"fu_yun_award"` // 双色球福运奖（奖池≥15亿派奖期，中3红奖5元）
 }
 
 // CreateDraw POST /api/draws
@@ -43,6 +45,7 @@ func CreateDraw(c *gin.Context) {
 		DrawDate:    drawDate,
 		Numbers:     req.Numbers,
 		Source:      "manual",
+		FuYunAward:  req.FuYunAward,
 	}
 
 	if err := drawService.CreateDrawResult(draw); err != nil {
@@ -145,7 +148,7 @@ func FetchBatchDraws(c *gin.Context) {
 			if strings.Contains(err.Error(), "已存在") {
 				existCount++
 			} else {
-				log.Printf("保存开奖结果失败: %v", err)
+				logger.GetSugarLogger().Errorf("保存开奖结果失败: %v", err)
 			}
 			continue
 		}
@@ -196,6 +199,7 @@ func UpdateDraw(c *gin.Context) {
 	draw.IssueNumber = req.IssueNumber
 	draw.DrawDate = drawDate
 	draw.Numbers = req.Numbers
+	draw.FuYunAward = req.FuYunAward
 
 	if err := drawService.UpdateDrawResult(&draw); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败: " + err.Error()})
@@ -310,4 +314,23 @@ func UpdateWinning(c *gin.Context) {
 func FetchAutoDraws(c *gin.Context) {
 	SchedulerService.TriggerNow()
 	c.JSON(http.StatusOK, gin.H{"message": "已触发自动抓取任务，请稍后查看结果"})
+}
+
+// GetDrawAnalysis GET /api/draws/analysis - 开奖号码分析
+func GetDrawAnalysis(c *gin.Context) {
+	lotteryType := c.Query("lottery_type")
+	if lotteryType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定彩票类型"})
+		return
+	}
+	count, _ := strconv.Atoi(c.DefaultQuery("count", "50"))
+	if count < 0 {
+		count = 0
+	}
+	result, err := analysisService.GetAnalysis(lotteryType, count)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }

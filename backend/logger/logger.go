@@ -109,18 +109,22 @@ func initLoggerInternal(dataDir string) error {
 	isDevelopment := os.Getenv("ENV") == "development"
 
 	if isDevelopment {
-		// 开发环境：同时输出到控制台
 		consoleCore := zapcore.NewCore(
 			zapcore.NewConsoleEncoder(encoderConfig),
 			zapcore.AddSync(os.Stdout),
-			zap.InfoLevel,
+			zapcore.InfoLevel,
 		)
-		// 组合核心
 		zapLogger = zap.New(zapcore.NewTee(infoCore, errorCore, consoleCore), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 		sugarLogger = zapLogger.Sugar()
 	} else {
-		// 生产环境：只输出到文件
-		zapLogger = zap.New(zapcore.NewTee(infoCore, errorCore), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+		consoleEncoderConfig := encoderConfig
+		consoleEncoderConfig.TimeKey = "" // Docker json-file driver 会加时间,这里去掉避免重复
+		consoleCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(consoleEncoderConfig),
+			zapcore.AddSync(os.Stdout),
+			zapcore.InfoLevel,
+		)
+		zapLogger = zap.New(zapcore.NewTee(infoCore, errorCore, consoleCore), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 		sugarLogger = zapLogger.Sugar()
 	}
 
