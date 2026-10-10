@@ -1,12 +1,25 @@
 package services
 
 import (
+	"fmt"
 	"lottery-backend/logger"
 	"lottery-backend/models"
 	"strings"
 	"sync"
 	"time"
 )
+
+type fetchTime struct {
+	Hour   int
+	Minute int
+	Label  string
+}
+
+var defaultFetchTimes = []fetchTime{
+	{6, 0, "早上"},
+	{12, 0, "中午"},
+	{21, 30, "晚上(开奖后)"},
+}
 
 // SchedulerService 定时任务服务
 type SchedulerService struct {
@@ -16,6 +29,8 @@ type SchedulerService struct {
 	stopChan       chan struct{}
 	running        bool
 	mu             sync.Mutex
+	fetchMu        sync.Mutex
+	lastFetchDate  map[string]string
 }
 
 // NewSchedulerService 创建定时任务服务
@@ -24,50 +39,61 @@ func NewSchedulerService() *SchedulerService {
 		drawService:    &DrawService{},
 		winningService: &WinningService{},
 		stopChan:       make(chan struct{}),
+		lastFetchDate:  make(map[string]string),
 	}
 }
 
-// Start 启动定时任务（每天凌晨2点执行）
+// Start 启动定时任务（立即执行一次，后续按配置时段执行）
 func (s *SchedulerService) Start() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.running {
+		s.mu.Unlock()
 		logger.GetSugarLogger().Warn("定时任务服务已在运行中")
 		return
 	}
-
 	s.running = true
+	s.mu.Unlock()
 
-	// 计算下一个凌晨2点的时间
-	nextRun := s.nextRunTime()
-	initialDelay := time.Until(nextRun)
+	logger.GetSugarLogger().Info("🕐 定时任务服务已启动，立即执行首次抓取")
 
-	logger.GetSugarLogger().Infof("🕐 定时任务服务已启动，下次执行时间: %s", nextRun.Format("2006-01-02 15:04:05"))
+	// 立即执行一次
+	go s.runFetch()
 
-	// 使用单次定时器等待到第一个执行点，然后启动24小时周期的ticker
+	// 每分钟检查是否需要执行定时抓取
 	go func() {
-		select {
-		case <-time.After(initialDelay):
-			s.runFetch()
-		case <-s.stopChan:
-			return
-		}
-
-		// 之后每24小时执行一次
-		s.ticker = time.NewTicker(24 * time.Hour)
-		defer s.ticker.Stop()
+		ticker := time.NewTicker(1 * time.Minute)
+		s.mu.Lock()
+		s.ticker = ticker
+		s.mu.Unlock()
+		defer ticker.Stop()
 
 		for {
 			select {
-			case <-s.ticker.C:
-				s.runFetch()
+			case <-ticker.C:
+				s.checkScheduledTimes()
 			case <-s.stopChan:
 				logger.GetSugarLogger().Info("🛑 定时任务服务已停止")
 				return
 			}
 		}
 	}()
+}
+
+func (s *SchedulerService) checkScheduledTimes() {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+
+	for _, ft := range defaultFetchTimes {
+		if now.Hour() == ft.Hour && now.Minute() == ft.Minute {
+			key := fmt.Sprintf("%02d:%02d", ft.Hour, ft.Minute)
+			if s.lastFetchDate[key] != today {
+				s.lastFetchDate[key] = today
+				logger.GetSugarLogger().Infof("⏰ 到达%s定时抓取时间 (%s)，开始抓取", ft.Label, key)
+				go s.runFetch()
+			}
+			return
+		}
+	}
 }
 
 // Stop 停止定时任务
@@ -99,19 +125,15 @@ func (s *SchedulerService) IsRunning() bool {
 	return s.running
 }
 
-// nextRunTime 计算下一个凌晨2点的时间
-func (s *SchedulerService) nextRunTime() time.Time {
-	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, now.Location())
-	if !now.Before(next) {
-		next = next.Add(24 * time.Hour)
-	}
-	return next
-}
-
 // runFetch 执行抓取任务
 func (s *SchedulerService) runFetch() {
-	logger.GetSugarLogger().Info("🚀 开始执行定时抓取开奖号码任务")
+	if !s.fetchMu.TryLock() {
+		logger.GetSugarLogger().Warn("抓取任务正在执行中，跳过本次触发")
+		return
+	}
+	defer s.fetchMu.Unlock()
+
+	logger.GetSugarLogger().Info("🚀 开始执行抓取开奖号码任务")
 	results := s.FetchLatestDraws()
 
 	totalSaved := 0
@@ -126,7 +148,7 @@ func (s *SchedulerService) runFetch() {
 		}
 	}
 
-	logger.GetSugarLogger().Infof("📊 定时抓取任务完成，总计新增 %d 条，已存在 %d 条", totalSaved, totalExist)
+	logger.GetSugarLogger().Infof("📊 抓取任务完成，总计新增 %d 条，已存在 %d 条", totalSaved, totalExist)
 }
 
 // FetchResult 单种彩票的抓取结果
