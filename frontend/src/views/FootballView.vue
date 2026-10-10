@@ -86,7 +86,12 @@ const fetchMatches = async () => {
   try {
     const res = await footballMatchApi.fetch()
     const data = (res as any).data
-    showToast('success', `获取 ${data?.total || 0} 场比赛，新增 ${data?.saved_count || 0} 场`)
+    const topMessage = (res as any).message as string | undefined
+    if (data?.empty) {
+      showToast('info', topMessage || '当前数据源暂无可用赛程数据')
+    } else {
+      showToast('success', `获取 ${data?.total || 0} 场比赛，新增 ${data?.saved_count || 0} 场`)
+    }
     loadData()
   } catch (e: any) {
     showToast('error', '抓取赛程失败：' + (e.response?.data?.error || e.message))
@@ -100,7 +105,12 @@ const fetchResults = async () => {
   try {
     const res = await footballMatchApi.fetchResults()
     const data = (res as any).data
-    showToast('success', `更新 ${data?.updated_count || 0} 场比赛结果`)
+    const topMessage = (res as any).message as string | undefined
+    if (data?.empty) {
+      showToast('info', topMessage || '当前数据源暂无可用比赛结果')
+    } else {
+      showToast('success', `更新 ${data?.updated_count || 0} 场比赛结果`)
+    }
     loadData()
     await footballBetApi.recheck()
   } catch (e: any) {

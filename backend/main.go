@@ -23,7 +23,7 @@ import (
 
 // 版本信息（编译时注入）
 var (
-	Version   = "v1.1.2"
+	Version   = "v1.2.0"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
@@ -241,6 +241,7 @@ func main() {
 
 		// 公开配置（不需要登录）
 		api.GET("/configs/public", handlers.GetPublicConfigs)
+		api.GET("/football/config/status", handlers.GetFootballConfigStatus)
 
 		// 需要认证的路由
 		authorized := api.Group("")
@@ -285,6 +286,7 @@ func main() {
 			// 中奖记录
 			authorized.GET("/winnings", handlers.GetWinnings)
 			authorized.POST("/winnings/recheck", handlers.RecheckWinnings)
+			authorized.PUT("/winnings/:id", handlers.UpdateWinning)
 
 			// 统计分析
 			authorized.GET("/statistics/overview", handlers.GetOverview)
@@ -308,6 +310,16 @@ func main() {
 				football.DELETE("/bets/:id", handlers.DeleteFootballBet)
 				football.POST("/bets/recheck", handlers.RecheckFootballBets)
 				football.GET("/overview", handlers.GetFootballOverview)
+
+				football.GET("/config/me", handlers.GetMyFootballConfig)
+				football.PUT("/config/me", handlers.SetMyFootballConfig)
+				football.POST("/config/test", handlers.TestFootballKey)
+
+				footballAdmin := football.Group("")
+				footballAdmin.Use(middleware.AdminMiddleware())
+				{
+					footballAdmin.PUT("/config/global", handlers.SetGlobalFootballConfig)
+				}
 			}
 		}
 	}

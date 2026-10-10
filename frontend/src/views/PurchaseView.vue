@@ -2,10 +2,11 @@
 import { ref, onMounted, computed, reactive, nextTick, watch } from 'vue'
 import { purchaseApi, winningApi, drawApi } from '../api'
 import NumberInput from '../components/NumberInput.vue'
+import DigitNumberInput from '../components/DigitNumberInput.vue'
 import Pagination from '../components/Pagination.vue'
 import type { PurchaseRecord, LotteryType, DrawResult } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
-import { Plus, Trash2, Edit2, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-vue-next'
+import { Plus, Trash2, Edit2, Copy, Search, X, ChevronDown, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-vue-next'
 
 const purchases = ref<PurchaseRecord[]>([])
 const drawResults = ref<DrawResult[]>([])
@@ -178,16 +179,23 @@ const form = ref({
 // 当前注数（从 NumberInput 组件获取）
 const currentBetCount = ref(1)
 
+// 数字型彩票（玩法在 DigitNumberInput 内选择）
+const digitTypes = ['福彩3D', '排列3', '排列5']
+const isDigitForm = computed(() => digitTypes.includes(form.value.lottery_type))
+
 const handleBetCountChange = (count: number) => {
   currentBetCount.value = count
-  // 如果是复式，自动更新金额和投注方式
-  if (count > 1) {
-    form.value.bet_type = '复式'
-    form.value.amount = count * 2 * form.value.multiple * form.value.periods
-  } else {
-    form.value.bet_type = '单式'
-    form.value.amount = 2 * form.value.multiple * form.value.periods
+  // 数字型彩票的投注方式由 DigitNumberInput 通过 betTypeChange 设置，这里不覆盖
+  if (!isDigitForm.value) {
+    form.value.bet_type = count > 1 ? '复式' : '单式'
   }
+  const base = count > 1 ? count * 2 : 2
+  form.value.amount = base * form.value.multiple * form.value.periods
+}
+
+// 数字型彩票玩法标签（直选/直选复式/组选3/组选6/定位胆）
+const handleBetTypeChange = (betType: string) => {
+  form.value.bet_type = betType
 }
 
 // 计算金额
@@ -248,6 +256,68 @@ const loadPurchases = async () => {
 
 onMounted(loadPurchases)
 
+// ===== 按彩票类型记忆上次填写的号码 =====
+const lastNumbersKey = (type: string) => `lottery:lastNumbers:${type}`
+
+const getLastNumbers = (type: LotteryType): string => {
+  try {
+    return localStorage.getItem(lastNumbersKey(type)) || ''
+  } catch {
+    return ''
+  }
+}
+
+const saveLastNumbers = (type: LotteryType, numbers: string) => {
+  try {
+    if (numbers && numbers !== '[]') localStorage.setItem(lastNumbersKey(type), numbers)
+  } catch {
+    // ignore
+  }
+}
+
+// 触发 NumberInput 重新回填号码（因其 v-if 渲染且依赖 modelValue 变化）
+const refillNumbers = () => {
+  setTimeout(() => {
+    if (form.value.numbers) {
+      const temp = form.value.numbers
+      form.value.numbers = ''
+      form.value.numbers = temp
+    }
+  }, 0)
+}
+
+// 新增模式下切换彩票类型时，回填该类型上次保存的号码
+const onLotteryTypeChange = () => {
+  if (editingId.value) return
+  const last = getLastNumbers(form.value.lottery_type)
+  form.value.numbers = ''
+  nextTick(() => {
+    form.value.numbers = last
+  })
+}
+
+// 复制一条购买记录：保留号码等，清空期号、日期改为今天，作为新记录
+const copyPurchase = (item: PurchaseRecord) => {
+  errors.issue_number = ''
+  errors.numbers = ''
+  editingId.value = null
+  form.value = {
+    lottery_type: item.lottery_type,
+    issue_number: '',
+    purchase_date: new Date().toISOString().split('T')[0],
+    numbers: item.numbers,
+    bet_type: item.bet_type,
+    amount: item.amount,
+    multiple: item.multiple || 1,
+    append: item.append || false,
+    periods: item.periods || 1,
+    remark: item.remark
+  }
+  currentBetCount.value = 1
+  showModal.value = true
+  refillNumbers()
+}
+
 const openModal = (item?: PurchaseRecord) => {
   // 清空校验错误
   errors.issue_number = ''
@@ -273,7 +343,7 @@ const openModal = (item?: PurchaseRecord) => {
       lottery_type: '双色球',
       issue_number: '',
       purchase_date: new Date().toISOString().split('T')[0],
-      numbers: '',
+      numbers: getLastNumbers('双色球'),
       bet_type: '单式',
       amount: 2,
       multiple: 1,
@@ -285,14 +355,7 @@ const openModal = (item?: PurchaseRecord) => {
   }
   showModal.value = true
   // 延迟触发一次 watch 确保 NumberInput 正确回填（因为 NumberInput 是 v-if 渲染的）
-  setTimeout(() => {
-    if (item && form.value.numbers) {
-      // 触发一次 numbers 的响应式更新
-      const temp = form.value.numbers
-      form.value.numbers = ''
-      form.value.numbers = temp
-    }
-  }, 0)
+  refillNumbers()
 }
 
 const closeModal = () => {
@@ -320,6 +383,8 @@ const savePurchase = async () => {
       await purchaseApi.update(editingId.value, payload)
     } else {
       await purchaseApi.create(payload)
+      // 记住该彩票类型本次填写的号码，下次新增时自动回填
+      saveLastNumbers(payload.lottery_type, payload.numbers)
     }
     closeModal()
     // 自动触发中奖检查
@@ -400,6 +465,44 @@ const parseNumbers = (json: string): any => {
   try { return JSON.parse(json) } catch { return {} }
 }
 
+// ===== 数字型彩票（福彩3D/排列3/排列5）展示 =====
+const isDigitType = (type: string) => digitTypes.includes(type)
+
+const digitPosLabels = (count: number) =>
+  count === 5 ? ['万', '千', '百', '十', '个'] : ['百', '十', '个']
+
+// 投注号码可读文本
+const formatDigitBet = (json: string): string => {
+  const n = parseNumbers(json)
+  const play = n.play || n.bet_type || '直选'
+  // 组选
+  if (Array.isArray(n.group) || play === '组选3' || play === '组选6') {
+    const g = (n.group || n.numbers || []) as number[]
+    return `${play}：${[...g].sort((a, b) => a - b).join(' ')}`
+  }
+  // 直选 / 定位胆
+  let pos: number[][] = []
+  if (Array.isArray(n.positions)) pos = n.positions
+  else if (Array.isArray(n.numbers)) pos = n.numbers.map((x: number) => [x])
+  else if (Array.isArray(n)) pos = n.map((x: number) => [x])
+  const labels = digitPosLabels(pos.length)
+  if (play === '定位胆') {
+    const parts = pos
+      .map((p, i) => (p && p.length ? `${labels[i]}:${[...p].sort((a, b) => a - b).join(',')}` : null))
+      .filter(Boolean)
+    return `定位胆 ${parts.join('  ')}`
+  }
+  return `${play}：` + pos.map(p => (p && p.length ? [...p].sort((a, b) => a - b).join(',') : '-')).join(' | ')
+}
+
+// 开奖号码数字数组（兼容裸数组 / {numbers:[...]}）
+const getDrawDigits = (json: string): number[] => {
+  const n = parseNumbers(json)
+  if (Array.isArray(n)) return n
+  if (Array.isArray(n.numbers)) return n.numbers
+  return []
+}
+
 // 判断是否有红球
 const hasRed = (json: string): boolean => {
   const n = parseNumbers(json)
@@ -451,7 +554,9 @@ const getWinningAmount = (purchase: PurchaseRecord): number => {
   const winning = winningRecords.value.find(
     w => w.purchase?.id === purchase.id
   )
-  return winning?.prize_amount || 0
+  if (!winning) return 0
+  // 优先使用手动调整后的金额
+  return winning.manual_amount != null ? winning.manual_amount : (winning.prize_amount || 0)
 }
 
 // 获取购买记录对应的中奖信息
@@ -624,6 +729,9 @@ const recheckWinnings = async () => {
                 </span>
               </div>
               <div class="flex items-center gap-1 shrink-0 ml-2">
+                <button @click="copyPurchase(item)" class="p-1.5 text-slate-400 hover:text-emerald-500 cursor-pointer" title="复制">
+                  <Copy class="w-4 h-4" />
+                </button>
                 <button @click="openModal(item)" class="p-1.5 text-slate-400 hover:text-blue-500 cursor-pointer">
                   <Edit2 class="w-4 h-4" />
                 </button>
@@ -633,6 +741,16 @@ const recheckWinnings = async () => {
               </div>
             </div>
             <div class="mb-2">
+              <!-- 数字型彩票（福彩3D/排列3/排列5） -->
+              <template v-if="isDigitType(item.lottery_type)">
+                <div class="text-sm text-slate-700 font-mono break-all">{{ formatDigitBet(item.numbers) }}</div>
+                <div v-if="getDrawNumbers(item)" class="flex items-center gap-1 mt-1.5">
+                  <span class="text-xs text-slate-400 shrink-0 w-12">开奖号码</span>
+                  <span v-for="(d, idx) in getDrawDigits(getDrawNumbers(item)!)" :key="idx"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-red-500 text-white">{{ d }}</span>
+                </div>
+              </template>
+              <template v-else>
               <div v-if="getDrawNumbers(item)" class="space-y-1.5">
               <div class="flex items-center gap-1">
                 <span class="text-xs text-slate-400 shrink-0 w-12">投注号码</span>
@@ -674,6 +792,7 @@ const recheckWinnings = async () => {
                   {{ ball.num }}
                 </span>
               </div>
+              </template>
             </div>
             <div class="flex items-center gap-4 text-xs text-slate-500">
               <span class="flex items-center gap-1">
@@ -714,6 +833,16 @@ const recheckWinnings = async () => {
                 <td class="px-4 py-3 text-sm font-medium text-slate-700">{{ item.lottery_type }}</td>
                 <td class="px-4 py-3 text-sm text-slate-600">{{ item.issue_number }}</td>
                 <td class="px-4 py-3">
+                  <!-- 数字型彩票（福彩3D/排列3/排列5） -->
+                  <template v-if="isDigitType(item.lottery_type)">
+                    <div class="text-sm text-slate-700 font-mono">{{ formatDigitBet(item.numbers) }}</div>
+                    <div v-if="getDrawNumbers(item)" class="flex items-center gap-1 mt-1">
+                      <span class="text-xs text-slate-400 shrink-0 w-10">开奖</span>
+                      <span v-for="(d, idx) in getDrawDigits(getDrawNumbers(item)!)" :key="idx"
+                        class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold bg-red-500 text-white">{{ d }}</span>
+                    </div>
+                  </template>
+                  <template v-else>
                   <div v-if="getDrawNumbers(item)" class="space-y-1">
                     <div class="flex items-center gap-1">
                       <span class="text-xs text-slate-400 shrink-0 w-10">投注</span>
@@ -755,6 +884,7 @@ const recheckWinnings = async () => {
                       {{ ball.num }}
                     </span>
                   </div>
+                  </template>
                 </td>
                 <td class="px-4 py-3 text-sm text-slate-600">
                   <div class="flex items-center gap-1">
@@ -781,6 +911,9 @@ const recheckWinnings = async () => {
                 </td>
                 <td class="px-4 py-3 text-sm text-slate-500">{{ item.purchase_date.split('T')[0] }}</td>
                 <td class="px-4 py-3 text-right">
+                  <button @click="copyPurchase(item)" class="p-1.5 text-slate-400 hover:text-emerald-500 cursor-pointer" title="复制">
+                    <Copy class="w-4 h-4" />
+                  </button>
                   <button @click="openModal(item)" class="p-1.5 text-slate-400 hover:text-blue-500 cursor-pointer">
                     <Edit2 class="w-4 h-4" />
                   </button>
@@ -816,7 +949,7 @@ const recheckWinnings = async () => {
         <div class="p-6 space-y-4">
           <div>
             <label class="block text-sm font-medium text-slate-600 mb-1.5">彩票类型</label>
-            <select v-model="form.lottery_type" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer">
+            <select v-model="form.lottery_type" @change="onLotteryTypeChange" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer">
               <option v-for="t in lotteryTypes" :key="t" :value="t">{{ t }}</option>
             </select>
           </div>
@@ -847,7 +980,8 @@ const recheckWinnings = async () => {
             <label class="block text-sm font-medium text-slate-600 mb-1.5">
               号码<span class="text-red-500 ml-0.5">*</span>
             </label>
-            <NumberInput v-model="form.numbers" :lottery-type="form.lottery_type" @update:modelValue="errors.numbers = ''" @betCountChange="handleBetCountChange" />
+            <DigitNumberInput v-if="isDigitForm" v-model="form.numbers" :lottery-type="form.lottery_type" @update:modelValue="errors.numbers = ''" @betCountChange="handleBetCountChange" @betTypeChange="handleBetTypeChange" />
+            <NumberInput v-else v-model="form.numbers" :lottery-type="form.lottery_type" @update:modelValue="errors.numbers = ''" @betCountChange="handleBetCountChange" />
             <p v-if="errors.numbers" class="mt-1 text-xs text-red-500 flex items-center gap-1">
               <span>⚠</span> {{ errors.numbers }}
             </p>
@@ -883,13 +1017,13 @@ const recheckWinnings = async () => {
           </div>
 
           <div class="grid grid-cols-2 gap-4">
-            <div>
+            <div v-if="!isDigitForm">
               <label class="block text-sm font-medium text-slate-600 mb-1.5">投注方式</label>
               <select v-model="form.bet_type" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 cursor-pointer">
                 <option v-for="t in betTypes" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
-            <div>
+            <div :class="{ 'col-span-2': isDigitForm }">
               <label class="block text-sm font-medium text-slate-600 mb-1.5">备注</label>
               <input v-model="form.remark" placeholder="可选" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400" />
             </div>

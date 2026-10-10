@@ -1,8 +1,24 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { footballMatchApi, footballBetApi } from '../api'
-import type { FootballMatch, FootballMatchStatus } from '../types'
-import { Plus, Trash2, Edit2, X, RefreshCw, Download, CheckCircle, AlertCircle } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import { footballMatchApi, footballBetApi, footballConfigApi } from '../api'
+import type { FootballMatch, FootballMatchStatus, FootballConfigStatus } from '../types'
+import { Plus, Trash2, Edit2, X, RefreshCw, Download, CheckCircle, AlertCircle, Database, ExternalLink } from 'lucide-vue-next'
+
+const router = useRouter()
+const systemStatus = ref<FootballConfigStatus | null>(null)
+
+const loadSystemStatus = async () => {
+  try {
+    const res = await footballConfigApi.getSystemStatus()
+    systemStatus.value = res.data
+  } catch {}
+}
+
+onMounted(() => {
+  loadMatches()
+  loadSystemStatus()
+})
 
 const matches = ref<FootballMatch[]>([])
 const loading = ref(false)
@@ -148,7 +164,12 @@ const fetchMatches = async () => {
   try {
     const res = await footballMatchApi.fetch()
     const data = (res as any).data
-    showToast('success', `获取 ${data?.total || 0} 场比赛，新增 ${data?.saved_count || 0} 场`)
+    const topMessage = (res as any).message as string | undefined
+    if (data?.empty) {
+      showToast('info', topMessage || '当前数据源暂无可用赛程数据')
+    } else {
+      showToast('success', `获取 ${data?.total || 0} 场比赛，新增 ${data?.saved_count || 0} 场`)
+    }
     loadMatches()
   } catch (e: any) {
     showToast('error', '抓取失败：' + (e.response?.data?.error || e.message))
@@ -162,7 +183,12 @@ const fetchResults = async () => {
   try {
     const res = await footballMatchApi.fetchResults()
     const data = (res as any).data
-    showToast('success', `更新 ${data?.updated_count || 0} 场比赛结果`)
+    const topMessage = (res as any).message as string | undefined
+    if (data?.empty) {
+      showToast('info', topMessage || '当前数据源暂无可用比赛结果')
+    } else {
+      showToast('success', `更新 ${data?.updated_count || 0} 场比赛结果`)
+    }
     loadMatches()
     await footballBetApi.recheck()
   } catch (e: any) {
@@ -183,6 +209,38 @@ const matchStatusColors: Record<string, string> = {
 
 <template>
   <div class="animate-fade-in">
+    <div
+      v-if="systemStatus && !systemStatus.configured"
+      class="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3"
+    >
+      <Database class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+      <div class="flex-1 text-sm text-amber-900">
+        <p class="font-medium">「一键抓取开奖结果」功能未配置数据源</p>
+        <p class="text-amber-800 mt-1">
+          当前可使用「抓取赛程」自动同步近期比赛;「获取结果」需先配置 API-Football Key。
+          {{ systemStatus.registration_url ? '免费' : '' }}100 次/天,邮箱注册即可。
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button
+            @click="router.push('/settings')"
+            class="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition-colors"
+          >
+            去设置我的 Key
+          </button>
+          <a
+            v-if="systemStatus.registration_url"
+            :href="systemStatus.registration_url"
+            target="_blank"
+            rel="noopener"
+            class="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-lg text-xs font-medium transition-colors"
+          >
+            <ExternalLink class="w-3 h-3" />
+            去 api-football.com 注册
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="mb-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
