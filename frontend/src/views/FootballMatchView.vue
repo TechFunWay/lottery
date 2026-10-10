@@ -10,7 +10,9 @@ const systemStatus = ref<FootballConfigStatus | null>(null)
 
 const loadSystemStatus = async () => {
   try {
-    const res = await footballConfigApi.getSystemStatus()
+    // 当前页面已登录，应展示当前用户最终生效的 Key（个人 > 全局 > 环境/内置）。
+    // 使用公开的系统状态会忽略用户在“设置”中保存的个人 Key，造成误报未配置。
+    const res = await footballConfigApi.getMyStatus()
     systemStatus.value = res.data
   } catch {}
 }

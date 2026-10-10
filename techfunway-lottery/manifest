@@ -1,5 +1,5 @@
 appname               = techfunway-lottery
-version               = 1.3.0
+version               = 1.3.1
 display_name          = 彩彩助手
 desc                  = 彩彩助手，帮助你记录彩彩购买、自动识别中奖、统计分析盈亏，支持多种彩彩类型和竞彩足球
 platform              = x86
@@ -11,6 +11,16 @@ distributor_url       = http://techfunway.wycto.cn
 desktop_uidir         = ui
 desktop_applaunchname = techfunway-lottery.Application
 changelog             = """
+v1.3.1 更新内容
+   改进
+   - 补充移动端网页快捷方式图标
+   - API-Football 配置状态按当前用户实际生效的 Key 显示
+   Bug 修复
+   - 修复 API-Football 返回业务错误时被误判为“暂无结果”的问题
+   - 修复隔天补抓时，已标记为“已完赛”但没有比分的比赛无法回填赛果
+   - 修复竞彩足球同场多选被错误按全部命中计算，导致复式二串一误判未中奖
+   - 修复“重新检查”仅处理待开奖记录，历史误判记录无法自动纠正
+
 v1.3.0 更新内容
    新功能
    - 号码分析：完整的开奖号码分析页面，包含频率图、遗漏图、走势图、和值跨度走势
