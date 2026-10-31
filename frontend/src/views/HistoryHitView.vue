@@ -54,24 +54,28 @@ interface NumberBall {
   type: 'red' | 'blue' | 'main'
 }
 
-const formatNumbers = (json: string): NumberBall[] => {
+const noPadType = (t?: string) => t === '福彩3D' || t === '排列3' || t === '排列5' || t === '七星彩'
+
+const formatNumbers = (json: string, lotteryType?: string): NumberBall[] => {
+  // 数字型（0-9 一位数）不补零
+  const show = (x: number) => noPadType(lotteryType) ? String(x) : String(x).padStart(2, '0')
   try {
     const n = JSON.parse(json)
     const balls: NumberBall[] = []
     if (n.red) {
-      n.red.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      n.red.forEach((x: number) => balls.push({ num: show(x), type: 'red' }))
       balls.push({ num: '|', type: 'main' })
-      n.blue.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue' }))
+      n.blue.forEach((x: number) => balls.push({ num: show(x), type: 'blue' }))
     } else if (n.front) {
-      n.front.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      n.front.forEach((x: number) => balls.push({ num: show(x), type: 'red' }))
       balls.push({ num: '|', type: 'main' })
-      n.back.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue' }))
+      n.back.forEach((x: number) => balls.push({ num: show(x), type: 'blue' }))
     } else if (n.main) {
-      n.main.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      n.main.forEach((x: number) => balls.push({ num: show(x), type: 'red' }))
     } else if (n.numbers) {
-      n.numbers.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main' }))
+      n.numbers.forEach((x: number) => balls.push({ num: show(x), type: 'main' }))
     } else if (Array.isArray(n)) {
-      n.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main' }))
+      n.forEach((x: number) => balls.push({ num: show(x), type: 'main' }))
     }
     return balls
   } catch {
@@ -93,7 +97,8 @@ interface NumberBallWithHit extends NumberBall {
   isHit: boolean
 }
 
-const formatNumbersWithHit = (purchaseJson: string, drawJson: string): NumberBallWithHit[] => {
+const formatNumbersWithHit = (purchaseJson: string, drawJson: string, lotteryType?: string): NumberBallWithHit[] => {
+  const show = (x: number) => noPadType(lotteryType) ? String(x) : String(x).padStart(2, '0')
   try {
     const purchase = parseNumbers(purchaseJson)
     const draw = parseNumbers(drawJson)
@@ -110,18 +115,28 @@ const formatNumbersWithHit = (purchaseJson: string, drawJson: string): NumberBal
 
     const balls: NumberBallWithHit[] = []
 
-    if (purchase.red) {
-      purchase.red.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red', isHit: drawRedSet.has(x) }))
+    if (lotteryType === '七星彩') {
+      // 七星彩按位命中高亮（兼容旧裸数组格式 [a..f, 特别号]）
+      const norm = (o: any): { red: number[]; blue: number } => Array.isArray(o)
+        ? { red: o.slice(0, 6), blue: o[6] }
+        : { red: Array.isArray(o?.red) ? o.red : [], blue: Array.isArray(o?.blue) ? o.blue[0] : undefined as any }
+      const p = norm(purchase)
+      const d = norm(draw)
+      p.red.forEach((x: number, i: number) => balls.push({ num: show(x), type: 'red', isHit: x === d.red[i] }))
       balls.push({ num: '|', type: 'main', isHit: false })
-      purchase.blue.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue', isHit: drawBlueSet.has(x) }))
+      balls.push({ num: show(p.blue), type: 'blue', isHit: p.blue === d.blue })
+    } else if (purchase.red) {
+      purchase.red.forEach((x: number) => balls.push({ num: show(x), type: 'red', isHit: drawRedSet.has(x) }))
+      balls.push({ num: '|', type: 'main', isHit: false })
+      purchase.blue.forEach((x: number) => balls.push({ num: show(x), type: 'blue', isHit: drawBlueSet.has(x) }))
     } else if (purchase.front) {
-      purchase.front.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red', isHit: drawRedSet.has(x) }))
+      purchase.front.forEach((x: number) => balls.push({ num: show(x), type: 'red', isHit: drawRedSet.has(x) }))
       balls.push({ num: '|', type: 'main', isHit: false })
-      purchase.back.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue', isHit: drawBlueSet.has(x) }))
+      purchase.back.forEach((x: number) => balls.push({ num: show(x), type: 'blue', isHit: drawBlueSet.has(x) }))
     } else if (purchase.main) {
-      purchase.main.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red', isHit: drawRedSet.has(x) }))
+      purchase.main.forEach((x: number) => balls.push({ num: show(x), type: 'red', isHit: drawRedSet.has(x) }))
     } else if (purchase.numbers) {
-      purchase.numbers.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main', isHit: drawRedSet.has(x) }))
+      purchase.numbers.forEach((x: number) => balls.push({ num: show(x), type: 'main', isHit: drawRedSet.has(x) }))
     }
 
     return balls
@@ -131,9 +146,28 @@ const formatNumbersWithHit = (purchaseJson: string, drawJson: string): NumberBal
 }
 
 // 计算中奖金额（按照后端规则）
-const calculatePrize = (purchaseJson: string, drawJson: string): number => {
+const calculatePrize = (purchaseJson: string, drawJson: string, lotteryType?: string): number => {
   const purchase = parseNumbers(purchaseJson)
   const draw = parseNumbers(drawJson)
+
+  // 七星彩：按位比对（前 6 位相同个数 k + 特别号是否相同 s），与后端 CalculateQiXingCai 一致
+  if (lotteryType === '七星彩') {
+    const pRed = Array.isArray(purchase.red) ? purchase.red : Array.isArray(purchase) ? purchase.slice(0, 6) : purchase.numbers
+    const pBlue = Array.isArray(purchase.blue) ? purchase.blue[0] : Array.isArray(purchase) ? purchase[6] : undefined
+    const dRed = Array.isArray(draw.red) ? draw.red : Array.isArray(draw) ? draw.slice(0, 6) : draw.numbers
+    const dBlue = Array.isArray(draw.blue) ? draw.blue[0] : Array.isArray(draw) ? draw[6] : undefined
+    if (!Array.isArray(pRed) || !Array.isArray(dRed)) return 0
+    let k = 0
+    for (let i = 0; i < 6; i++) if (pRed[i] === dRed[i]) k++
+    const s = pBlue !== undefined && dBlue !== undefined && pBlue === dBlue ? 1 : 0
+    if (k === 6 && s === 1) return 5000000  // 一等奖（浮动，此处兜底参考值）
+    if (k === 6) return 30000               // 二等奖（浮动，兜底参考值）
+    if (k === 5 && s === 1) return 3000     // 三等奖
+    if (k === 5 || (k === 4 && s === 1)) return 500  // 四等奖
+    if (k === 4 || (k === 3 && s === 1)) return 30   // 五等奖
+    if (s === 1) return 5                   // 六等奖
+    return 0
+  }
 
   const drawRedSet = new Set<number>()
   const drawBlueSet = new Set<number>()
@@ -214,9 +248,28 @@ const calculatePrize = (purchaseJson: string, drawJson: string): number => {
 }
 
 // 计算奖项等级
-const getPrizeLevel = (purchaseJson: string, drawJson: string): { level: number; name: string } => {
+const getPrizeLevel = (purchaseJson: string, drawJson: string, lotteryType?: string): { level: number; name: string } => {
   const purchase = parseNumbers(purchaseJson)
   const draw = parseNumbers(drawJson)
+
+  // 七星彩按位比对，避免落到下面的双色球集合匹配
+  if (lotteryType === '七星彩') {
+    const pRed = Array.isArray(purchase.red) ? purchase.red : Array.isArray(purchase) ? purchase.slice(0, 6) : purchase.numbers
+    const pBlue = Array.isArray(purchase.blue) ? purchase.blue[0] : Array.isArray(purchase) ? purchase[6] : undefined
+    const dRed = Array.isArray(draw.red) ? draw.red : Array.isArray(draw) ? draw.slice(0, 6) : draw.numbers
+    const dBlue = Array.isArray(draw.blue) ? draw.blue[0] : Array.isArray(draw) ? draw[6] : undefined
+    if (!Array.isArray(pRed) || !Array.isArray(dRed)) return { level: 0, name: '未中奖' }
+    let k = 0
+    for (let i = 0; i < 6; i++) if (pRed[i] === dRed[i]) k++
+    const s = pBlue !== undefined && dBlue !== undefined && pBlue === dBlue ? 1 : 0
+    if (k === 6 && s === 1) return { level: 1, name: '一等奖' }
+    if (k === 6) return { level: 2, name: '二等奖' }
+    if (k === 5 && s === 1) return { level: 3, name: '三等奖' }
+    if (k === 5 || (k === 4 && s === 1)) return { level: 4, name: '四等奖' }
+    if (k === 4 || (k === 3 && s === 1)) return { level: 5, name: '五等奖' }
+    if (s === 1) return { level: 6, name: '六等奖' }
+    return { level: 0, name: '未中奖' }
+  }
 
   const drawRedSet = new Set<number>()
   const drawBlueSet = new Set<number>()
@@ -363,7 +416,15 @@ const purchaseHitHistory = computed<PurchaseHitHistory[]>(() => {
       let hitRedBalls: number[] = []
       let hitBlueBalls: number[] = []
 
-      if (purchaseNums.red) {
+      if (purchase.lottery_type === '七星彩') {
+        // 七星彩按位命中：前 6 位逐位比对，特别号单独一位
+        const pr = Array.isArray(purchaseNums.red) ? purchaseNums.red : []
+        const dr = Array.isArray(drawNums.red) ? drawNums.red : []
+        hitRedBalls = pr.filter((n: number, i: number) => n === dr[i])
+        const pb = Array.isArray(purchaseNums.blue) ? purchaseNums.blue[0] : undefined
+        const db = Array.isArray(drawNums.blue) ? drawNums.blue[0] : undefined
+        hitBlueBalls = pb !== undefined && pb === db ? [pb] : []
+      } else if (purchaseNums.red) {
         hitRedBalls = purchaseNums.red.filter((n: number) => drawRedSet.has(n))
         hitBlueBalls = purchaseNums.blue ? purchaseNums.blue.filter((n: number) => drawBlueSet.has(n)) : []
       } else if (purchaseNums.front) {
@@ -377,7 +438,7 @@ const purchaseHitHistory = computed<PurchaseHitHistory[]>(() => {
 
       const redHits = hitRedBalls.length
       const blueHits = hitBlueBalls.length
-      const prize = calculatePrize(purchase.numbers, draw.numbers)
+      const prize = calculatePrize(purchase.numbers, draw.numbers, purchase.lottery_type)
 
       // 只有中奖（有奖金）的才记录
       if (prize > 0) {
@@ -546,7 +607,7 @@ const toggleExpand = (id: number) => {
                 <span class="text-xs text-slate-400">{{ hit.draw.draw_date.split('T')[0] }}</span>
                 <span class="px-2 py-0.5 rounded-full text-xs font-medium"
                   :class="getPrizeLevelClass(item.purchase.lottery_type, hit.prize)">
-                  {{ getPrizeLevel(item.purchase.numbers, hit.draw.numbers).name }}
+                  {{ getPrizeLevel(item.purchase.numbers, hit.draw.numbers, item.purchase.lottery_type).name }}
                 </span>
               </div>
               <span v-if="hit.prize > 0" class="text-sm font-bold text-emerald-600">¥{{ hit.prize.toLocaleString() }}</span>
@@ -556,7 +617,7 @@ const toggleExpand = (id: number) => {
             <div class="flex items-center gap-2 mb-2">
               <span class="text-xs text-slate-400 shrink-0 w-10">开奖</span>
               <div class="flex flex-wrap items-center gap-1">
-                <template v-for="(ball, idx) in formatNumbers(hit.draw.numbers)" :key="idx">
+                <template v-for="(ball, idx) in formatNumbers(hit.draw.numbers, hit.draw.lottery_type)" :key="idx">
                   <span v-if="ball.num === '|'" class="text-slate-300 w-5 text-center">|</span>
                   <span v-else
                     class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
@@ -571,7 +632,7 @@ const toggleExpand = (id: number) => {
             <div class="flex items-center gap-2">
               <span class="text-xs text-slate-400 shrink-0 w-10">投注</span>
               <div class="flex flex-wrap items-center gap-1">
-                <template v-for="(ball, idx) in formatNumbersWithHit(item.purchase.numbers, hit.draw.numbers)" :key="idx">
+                <template v-for="(ball, idx) in formatNumbersWithHit(item.purchase.numbers, hit.draw.numbers, item.purchase.lottery_type)" :key="idx">
                   <span v-if="ball.num === '|'" class="text-slate-300 w-5 text-center">|</span>
                   <span v-else
                     class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"

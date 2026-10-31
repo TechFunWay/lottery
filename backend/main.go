@@ -25,7 +25,7 @@ import (
 
 // 版本信息（编译时注入）
 var (
-	Version   = "v1.5.0"
+	Version   = "v1.6.0"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )

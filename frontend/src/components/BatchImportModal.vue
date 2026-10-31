@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { purchaseApi } from '../api'
 import type { LotteryType } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
-import { parseNumberLines, formatHint } from '../utils/numberParse'
+import { parseNumberLines, formatHint, autoFormatCaret } from '../utils/numberParse'
 import { Plus, X, AlertCircle, CheckCircle } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -29,6 +29,37 @@ const text = ref('')
 const importing = ref(false)
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
+// 自动空格 / 自动换行（记忆到本地，默认开）
+const autoSpace = ref(localStorage.getItem('batchAutoSpace') !== '0')
+const autoNewline = ref(localStorage.getItem('batchAutoNewline') !== '0')
+watch(autoSpace, v => localStorage.setItem('batchAutoSpace', v ? '1' : '0'))
+watch(autoNewline, v => localStorage.setItem('batchAutoNewline', v ? '1' : '0'))
+
+// 手动输入时自动补分隔：每敲完一个号码自动加空格，整注敲完自动换行
+const composing = ref(false)
+const onNumbersInput = (e: Event) => {
+  const el = e.target as HTMLTextAreaElement
+  text.value = el.value
+  if (composing.value) return
+  // 仅在「插入一个数字」时自动补分隔；删除/粘贴/其他键不处理
+  const ie = e as InputEvent
+  if (ie.inputType !== 'insertText' || !/^\d$/.test(ie.data ?? '')) return
+  const caret = el.selectionStart ?? el.value.length
+  const r = autoFormatCaret(lotteryType.value, el.value, caret, {
+    autoSpace: autoSpace.value,
+    autoNewline: autoNewline.value
+  })
+  if (r) {
+    text.value = r.value
+    nextTick(() => {
+      const cur = textareaRef.value
+      if (cur && cur.value === r.value) {
+        cur.selectionStart = cur.selectionEnd = r.caret
+      }
+    })
+  }
+}
 
 watch(lotteryType, () => {
   // 切换彩种后重新解析
@@ -182,12 +213,27 @@ const close = () => emit('close')
           </div>
           <textarea
             ref="textareaRef"
-            v-model="text"
+            :value="text"
             rows="8"
             :placeholder="formatHint(lotteryType)"
+            @input="onNumbersInput"
+            @compositionstart="composing = true"
+            @compositionend="composing = false"
             class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-400 font-mono text-sm leading-relaxed resize-y"
           ></textarea>
-          <p class="mt-1 text-xs text-slate-400">{{ formatHint(lotteryType) }}；空行与 # 开头的行会被忽略</p>
+          <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs text-slate-400">{{ formatHint(lotteryType) }}；空行与 # 开头的行会被忽略</p>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+                <input v-model="autoSpace" type="checkbox" class="w-3.5 h-3.5 text-blue-500 border-slate-300 rounded focus:ring-blue-400 cursor-pointer" />
+                自动空格
+              </label>
+              <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none" title="每注敲满自动换到下一行；录复式时可关闭">
+                <input v-model="autoNewline" type="checkbox" class="w-3.5 h-3.5 text-blue-500 border-slate-300 rounded focus:ring-blue-400 cursor-pointer" />
+                自动换行
+              </label>
+            </div>
+          </div>
         </div>
 
         <!-- 解析预览 -->

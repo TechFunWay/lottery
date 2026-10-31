@@ -105,6 +105,8 @@ const generateLuckyNumbers = (type: LotteryType): string => {
     : generateUnique(config.redRange.min, config.redRange.max, config.redRange.count)
 
   if (!config.blueRange) {
+    // 七乐彩算奖按 {main, special}，其余数字型按 {numbers}
+    if (type === '七乐彩') return JSON.stringify({ main, special: [] })
     return JSON.stringify({ numbers: main })
   }
 
@@ -112,13 +114,13 @@ const generateLuckyNumbers = (type: LotteryType): string => {
     ? generateRandom(config.blueRange.min, config.blueRange.max, config.blueRange.count)
     : generateUnique(config.blueRange.min, config.blueRange.max, config.blueRange.count)
 
-  if (type === '双色球') {
+  if (type === '双色球' || type === '七星彩') {
     return JSON.stringify({ red: main, blue })
   }
   if (type === '大乐透') {
     return JSON.stringify({ front: main, back: blue })
   }
-  return JSON.stringify({ red: main })
+  return JSON.stringify({ numbers: main })
 }
 
 // 打开幸运号弹窗
@@ -544,24 +546,28 @@ interface NumberBall {
   type: 'red' | 'blue' | 'main'
 }
 
-const formatNumbers = (json: string): NumberBall[] => {
+const noPadType = (t?: string) => t === '福彩3D' || t === '排列3' || t === '排列5' || t === '七星彩'
+
+const formatNumbers = (json: string, lotteryType?: string): NumberBall[] => {
+  // 数字型（0-9 一位数）不补零
+  const show = (x: number) => noPadType(lotteryType) ? String(x) : String(x).padStart(2, '0')
   try {
     const n = JSON.parse(json)
     const balls: NumberBall[] = []
     if (n.red) {
-      n.red.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      n.red.forEach((x: number) => balls.push({ num: show(x), type: 'red' }))
       balls.push({ num: '|', type: 'main' })
-      n.blue.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue' }))
+      n.blue.forEach((x: number) => balls.push({ num: show(x), type: 'blue' }))
     } else if (n.front) {
-      n.front.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      n.front.forEach((x: number) => balls.push({ num: show(x), type: 'red' }))
       balls.push({ num: '|', type: 'main' })
-      n.back.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'blue' }))
+      n.back.forEach((x: number) => balls.push({ num: show(x), type: 'blue' }))
     } else if (n.main) {
-      n.main.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'red' }))
+      n.main.forEach((x: number) => balls.push({ num: show(x), type: 'red' }))
     } else if (n.numbers) {
-      n.numbers.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main' }))
+      n.numbers.forEach((x: number) => balls.push({ num: show(x), type: 'main' }))
     } else if (Array.isArray(n)) {
-      n.forEach((x: number) => balls.push({ num: String(x).padStart(2, '0'), type: 'main' }))
+      n.forEach((x: number) => balls.push({ num: show(x), type: 'main' }))
     }
     return balls
   } catch { return [] }
@@ -906,7 +912,7 @@ const recheckWinnings = async () => {
               </div>
               <div class="flex items-center gap-1">
                 <span class="text-xs text-slate-400 shrink-0 w-12">开奖号码</span>
-                <template v-for="(ball, idx) in formatNumbers(getDrawNumbers(item)!)" :key="idx">
+                <template v-for="(ball, idx) in formatNumbers(getDrawNumbers(item)!, item.lottery_type)" :key="idx">
                   <span v-if="ball.num === '|'"
                     class="text-slate-300 w-6 text-center">|</span>
                   <span v-else
@@ -920,7 +926,7 @@ const recheckWinnings = async () => {
               </div>
             </div>
             <div v-else class="flex flex-wrap gap-1">
-                <span v-for="(ball, idx) in formatNumbers(item.numbers)" :key="idx"
+                <span v-for="(ball, idx) in formatNumbers(item.numbers, item.lottery_type)" :key="idx"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
                   :class="ball.num === '|'
                     ? 'text-slate-300 text-xs bg-transparent'
@@ -1014,7 +1020,7 @@ const recheckWinnings = async () => {
                     </div>
                     <div class="flex items-center gap-1">
                       <span class="text-xs text-slate-400 shrink-0 w-10">开奖</span>
-                      <template v-for="(ball, idx) in formatNumbers(getDrawNumbers(item)!)" :key="idx">
+                      <template v-for="(ball, idx) in formatNumbers(getDrawNumbers(item)!, item.lottery_type)" :key="idx">
                         <span v-if="ball.num === '|'"
                           class="text-slate-300 w-5 text-center">|</span>
                         <span v-else
@@ -1028,7 +1034,7 @@ const recheckWinnings = async () => {
                     </div>
                   </div>
                   <div v-else class="flex flex-wrap gap-0.5">
-                    <span v-for="(ball, idx) in formatNumbers(item.numbers)" :key="idx"
+                    <span v-for="(ball, idx) in formatNumbers(item.numbers, item.lottery_type)" :key="idx"
                       class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
                       :class="ball.num === '|'
                         ? 'text-slate-300 text-xs bg-transparent'
@@ -1377,7 +1383,7 @@ const recheckWinnings = async () => {
                 <div class="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
               </div>
               <div v-else class="flex flex-wrap items-center justify-center gap-1.5">
-                <template v-for="(ball, idx) in formatNumbers(generatedNumbers)" :key="idx">
+                <template v-for="(ball, idx) in formatNumbers(generatedNumbers, selectedLotteryType)" :key="idx">
                   <span v-if="ball.num === '|'" class="text-slate-300 w-4 text-center">|</span>
                   <span v-else
                     class="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-bold"
