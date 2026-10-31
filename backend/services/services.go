@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -150,6 +151,8 @@ func (s *DrawService) FetchDrawResult(lotteryType models.LotteryType, issue stri
 		return s.fetchPaiLie5(issue)
 	case models.QiLeCai:
 		return s.fetchQiLeCai(issue)
+	case models.QiXingCai:
+		return s.fetchQiXingCai(issue)
 	default:
 		return nil, fmt.Errorf("暂不支持自动抓取 %s 开奖结果", lotteryType)
 	}
@@ -548,6 +551,8 @@ func (s *DrawService) FetchBatchDrawResults(lotteryType models.LotteryType, star
 		return s.fetchBatchPaiLie5(startDate, endDate, count)
 	case models.QiLeCai:
 		return s.fetchBatchQiLeCai(startDate, endDate, count)
+	case models.QiXingCai:
+		return s.fetchBatchQiXingCai(startDate, endDate, count)
 	default:
 		return nil, fmt.Errorf("暂不支持自动抓取 %s 开奖结果", lotteryType)
 	}
@@ -831,6 +836,11 @@ type sportteryDrawItem struct {
 	LotteryDrawNum    string `json:"lotteryDrawNum"`
 	LotteryDrawResult string `json:"lotteryDrawResult"` // 空格分隔，如 "9 5 4"
 	LotteryDrawTime   string `json:"lotteryDrawTime"`   // "2026-10-06"
+	TotalSaleAmount   string `json:"totalSaleAmount"`   // 千分位字符串，如 "15,663,888"
+	PrizeLevelList    []struct {
+		PrizeLevel  string `json:"prizeLevel"`  // 一等奖/二等奖/...
+		StakeAmount string `json:"stakeAmount"` // 单注奖金，千分位字符串；无人中时为 "---"
+	} `json:"prizeLevelList"`
 }
 
 type sportteryResp struct {
@@ -1104,6 +1114,191 @@ func (s *DrawService) fetchBatchPaiLie5Huiniao(startDate, endDate string, count 
 	return results, nil
 }
 
+// qxcNumbersJSON 七星彩号码 JSON：前 6 位存 red、特别号存 blue（与前端手工录入/随机选号一致）
+func qxcNumbersJSON(digits []int) string {
+	red := digits[:6]
+	blue := []int{digits[6]}
+	b, _ := json.Marshal(rules.QiXingCaiNumbers{Red: red, Blue: blue})
+	return string(b)
+}
+
+// sportteryPrizeAmount 从奖级列表取指定奖级的单注奖金（千分位字符串），取不到返回 nil
+func sportteryPrizeAmount(item *sportteryDrawItem, level string) *float64 {
+	for _, p := range item.PrizeLevelList {
+		if p.PrizeLevel == level {
+			s := strings.ReplaceAll(p.StakeAmount, ",", "")
+			if v, err := strconv.ParseFloat(s, 64); err == nil && v > 0 {
+				return &v
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// fetchQiXingCai 抓取七星彩开奖结果（主源体彩官网 gameNo=04，失败降级慧鸟）
+func (s *DrawService) fetchQiXingCai(issue string) (*models.DrawResult, error) {
+	items, err := fetchSportteryHistory("04", 30)
+	if err == nil {
+		item, pickErr := pickSportteryItem(items, issue)
+		if pickErr == nil {
+			return sportteryItemToQixingcai(*item)
+		}
+		if issue != "" {
+			return s.fetchQiXingCaiHuiniao(issue)
+		}
+	}
+	return s.fetchQiXingCaiHuiniao(issue)
+}
+
+// sportteryItemToQixingcai 体彩官网条目转七星彩开奖记录（7 位数字 + 一二等奖当期奖金）
+func sportteryItemToQixingcai(item sportteryDrawItem) (*models.DrawResult, error) {
+	numbers := parseSpaceNumbers(item.LotteryDrawResult)
+	if len(numbers) != 7 {
+		return nil, fmt.Errorf("七星彩开奖号码须为 7 位: %s", item.LotteryDrawResult)
+	}
+	drawDate, _ := time.Parse("2006-01-02", item.LotteryDrawTime)
+	return &models.DrawResult{
+		LotteryType:  models.QiXingCai,
+		IssueNumber:  item.LotteryDrawNum,
+		DrawDate:     drawDate,
+		Numbers:      qxcNumbersJSON(numbers),
+		Source:       "auto",
+		FirstAmount:  sportteryPrizeAmount(&item, "一等奖"),
+		SecondAmount: sportteryPrizeAmount(&item, "二等奖"),
+	}, nil
+}
+
+// fetchQiXingCaiHuiniao 慧鸟API抓取七星彩（降级方案，无浮动奖金额）
+func (s *DrawService) fetchQiXingCaiHuiniao(issue string) (*models.DrawResult, error) {
+	limit := 30
+	if issue == "" {
+		limit = 1
+	}
+	url := fmt.Sprintf("http://api.huiniao.top/interface/home/lotteryHistory?type=qxc&page=1&limit=%d", limit)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("网络请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %v", err)
+	}
+
+	var apiResp huiNiaoResp
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析开奖数据失败: %v", err)
+	}
+	if apiResp.Code != 1 || len(apiResp.Data.Data.List) == 0 {
+		return nil, fmt.Errorf("获取七星彩开奖数据失败: %s", apiResp.Info)
+	}
+
+	list := apiResp.Data.Data.List
+	item := list[0]
+	if issue != "" {
+		found := false
+		for _, r := range list {
+			if r.Code == issue {
+				item = r
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("未找到第 %s 期开奖数据", issue)
+		}
+	}
+	numbers := []int{parseInt(item.One), parseInt(item.Two), parseInt(item.Three), parseInt(item.Four), parseInt(item.Five), parseInt(item.Six), parseInt(item.Seven)}
+	drawDate, _ := time.Parse("2006-01-02", item.Day)
+	return &models.DrawResult{
+		LotteryType: models.QiXingCai,
+		IssueNumber: item.Code,
+		DrawDate:    drawDate,
+		Numbers:     qxcNumbersJSON(numbers),
+		Source:      "auto",
+	}, nil
+}
+
+// fetchBatchQiXingCai 批量抓取七星彩（主源体彩官网，失败降级慧鸟）
+func (s *DrawService) fetchBatchQiXingCai(startDate, endDate string, count int) ([]*models.DrawResult, error) {
+	if count <= 0 {
+		count = 20
+	}
+	items, err := fetchSportteryHistory("04", count)
+	if err == nil {
+		var results []*models.DrawResult
+		for _, item := range items {
+			draw, itemErr := sportteryItemToQixingcai(item)
+			if itemErr != nil {
+				continue
+			}
+			results = append(results, draw)
+		}
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+	return s.fetchBatchQiXingCaiHuiniao(startDate, endDate, count)
+}
+
+// fetchBatchQiXingCaiHuiniao 批量抓取七星彩（慧鸟降级方案）
+func (s *DrawService) fetchBatchQiXingCaiHuiniao(startDate, endDate string, count int) ([]*models.DrawResult, error) {
+	url := fmt.Sprintf("http://api.huiniao.top/interface/home/lotteryHistory?type=qxc&page=1&limit=%d", count)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("网络请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %v", err)
+	}
+
+	var apiResp huiNiaoResp
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("解析开奖数据失败: %v", err)
+	}
+	if apiResp.Code != 1 || len(apiResp.Data.Data.List) == 0 {
+		return nil, fmt.Errorf("获取七星彩开奖数据失败: %s", apiResp.Info)
+	}
+
+	var results []*models.DrawResult
+	for _, item := range apiResp.Data.Data.List {
+		numbers := []int{parseInt(item.One), parseInt(item.Two), parseInt(item.Three), parseInt(item.Four), parseInt(item.Five), parseInt(item.Six), parseInt(item.Seven)}
+		drawDate, _ := time.Parse("2006-01-02", item.Day)
+		results = append(results, &models.DrawResult{
+			LotteryType: models.QiXingCai,
+			IssueNumber: item.Code,
+			DrawDate:    drawDate,
+			Numbers:     qxcNumbersJSON(numbers),
+			Source:      "auto",
+		})
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("七星彩批量抓取无有效数据")
+	}
+	return results, nil
+}
+
 func splitString(s string, sep rune) []string {
 	var parts []string
 	start := 0
@@ -1143,6 +1338,8 @@ func (s *WinningService) CalculateWinning(purchase *models.PurchaseRecord, draw 
 		level, name, amount = rules.CalculatePaiLie5(purchase.Numbers, draw.Numbers, purchase.Multiple)
 	case models.QiLeCai:
 		level, name, amount = rules.CalculateQiLeCai(purchase.Numbers, draw.Numbers, purchase.Multiple)
+	case models.QiXingCai:
+		level, name, amount = rules.CalculateQiXingCai(purchase.Numbers, draw.Numbers, purchase.Multiple, draw.FirstAmount, draw.SecondAmount)
 	}
 
 	return &models.WinningRecord{

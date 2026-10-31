@@ -89,8 +89,14 @@ watch(() => props.modelValue, (val) => {
       mainNumbers.value = parsed.numbers.map((n: number) => n)
       blueNumbers.value = []
     } else if (Array.isArray(parsed)) {
-      mainNumbers.value = parsed.map((n: number) => n)
-      blueNumbers.value = []
+      // 七星彩旧数据兼容：裸 7 位数组按 6+1 切回红蓝两区
+      if (props.lotteryType === '七星彩' && parsed.length === 7) {
+        mainNumbers.value = parsed.slice(0, 6).map((n: number) => n)
+        blueNumbers.value = [parsed[6]]
+      } else {
+        mainNumbers.value = parsed.map((n: number) => n)
+        blueNumbers.value = []
+      }
     }
   } catch (e) {
     // ignore
@@ -164,6 +170,9 @@ const updateValue = () => {
     result = { numbers: mains, bet_type: '直选' }
   } else if (lt === '七乐彩') {
     result = { main: mains, special: blues }
+  } else if (lt === '七星彩') {
+    // 七星彩 6+1：与随机选号、后端分析口径一致存 {red, blue}，蓝号不再丢失
+    result = { red: mains, blue: blues }
   } else {
     result = mains
   }
@@ -402,6 +411,7 @@ const mainLabel = computed(() => {
   const lt = props.lotteryType
   if (lt === '大乐透') return '前区'
   if (lt === '七乐彩') return '主号'
+  if (lt === '七星彩') return '前六位'
   return '红球'
 })
 
@@ -409,6 +419,7 @@ const blueLabel = computed(() => {
   const lt = props.lotteryType
   if (lt === '大乐透') return '后区'
   if (lt === '七乐彩') return '特别号'
+  if (lt === '七星彩') return '特别号'
   return '蓝球'
 })
 
@@ -417,10 +428,11 @@ const mainMin = computed(() => config.value?.redRange.min ?? 0)
 const blueMax = computed(() => config.value?.blueRange?.max ?? 99)
 const blueMin = computed(() => config.value?.blueRange?.min ?? 0)
 
-// 补零显示：个位数显示为两位（如 5 → 05）
+// 补零显示：个位数显示为两位（如 5 → 05）；数字型（0-9）不补零
+const digitType = (lt: LotteryType) => lt === '福彩3D' || lt === '排列3' || lt === '排列5' || lt === '七星彩'
 const paddedValue = (val: number | null): string => {
   if (val === null) return ''
-  return String(val).padStart(2, '0')
+  return digitType(props.lotteryType) ? String(val) : String(val).padStart(2, '0')
 }
 
 // 是否支持复式

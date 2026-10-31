@@ -53,6 +53,10 @@ var UpgradeScripts = map[string]UpgradeScript{
 		Name: "网关域会话与登出抑制",
 		Func: upgrade_v1_4_8,
 	},
+	"v1.5.1": {
+		Name: "七星彩浮动奖字段",
+		Func: upgrade_v1_5_1,
+	},
 }
 
 // upgrade_v1_0_0 初始化数据库（当前版本）
@@ -147,4 +151,10 @@ func upgrade_v1_4_3(db *gorm.DB) error {
 // 网关隐式认人（X-Trim-Userid）之前先查它，保证飞牛授权登录的会话也退得掉。
 func upgrade_v1_4_8(db *gorm.DB) error {
 	return db.AutoMigrate(&models.AppSession{})
+}
+
+// upgrade_v1_5_1 开奖结果表补七星彩浮动奖字段（first_amount/second_amount），
+// 自动抓取时把官方公布的一、二等奖单注奖金存下，算奖按当期实际值。
+func upgrade_v1_5_1(db *gorm.DB) error {
+	return db.AutoMigrate(&models.DrawResult{})
 }

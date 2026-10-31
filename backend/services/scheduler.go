@@ -167,6 +167,7 @@ func (s *SchedulerService) FetchLatestDraws() map[string]FetchResult {
 		models.PaiLie3,
 		models.PaiLie5,
 		models.QiLeCai,
+		models.QiXingCai,
 	}
 
 	results := make(map[string]FetchResult)

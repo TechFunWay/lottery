@@ -267,8 +267,10 @@ const dingweiUnitPrize = 18.0
 
 // DigitBet 数字型彩票投注（福彩3D / 排列3 / 排列5）
 // 新结构：
-//   直选/定位胆 → positions（每位的候选数字数组，定位胆未投的位为空数组）
-//   组选3/组选6 → group（选中的数字集合）
+//
+//	直选/定位胆 → positions（每位的候选数字数组，定位胆未投的位为空数组）
+//	组选3/组选6 → group（选中的数字集合）
+//
 // 兼容旧结构：{ numbers:[...], bet_type:"直选" } 或裸数组 [..]
 type DigitBet struct {
 	Play      string  `json:"play"`      // 直选/组选3/组选6/定位胆
@@ -488,4 +490,94 @@ func CalculateQiLeCai(purchaseJSON, drawJSON string, multiple int) (level int, n
 		}
 	}
 	return 0, "未中奖", 0
+}
+
+// QiXingCaiNumbers 七星彩号码：6 个前区数字(0-9，按位) + 1 个特别号(0-9)
+type QiXingCaiNumbers struct {
+	Red  []int `json:"red"`  // 前 6 位
+	Blue []int `json:"blue"` // 第 7 位（特别号）
+}
+
+// 七星彩固定奖级奖金（三至六等奖），一、二等奖为浮动奖，
+// 由当期开奖记录的 FirstAmount/SecondAmount 提供（自动抓取时存官方公布值）。
+const (
+	qxcThirdPrize  = 3000.0
+	qxcFourthPrize = 500.0
+	qxcFifthPrize  = 30.0
+	qxcSixthPrize  = 5.0
+	// 无当期公布奖金时的兜底参考值（历史手动录入的开奖没有该字段，中奖记录可用手动调整修正）
+	qxcFirstFallback  = 5000000.0
+	qxcSecondFallback = 30000.0
+)
+
+// CalculateQiXingCai 七星彩算奖：按位比对，前 6 位相同个数 k + 特别号是否相同 s。
+// 一等 k=6且s=1；二等 k=6；三等 k=5且s=1；四等 k=5 或 k=4且s=1；
+// 五等 k=4 或 k=3且s=1；六等 s=1（k≤3）。一、二等金额取当期公布值（可为 0）。
+// purchaseJSON/drawJSON 兼容 {red,blue} 与裸 7 位数组两种历史格式。
+func CalculateQiXingCai(purchaseJSON, drawJSON string, multiple int, firstAmount, secondAmount *float64) (level int, name string, amount float64) {
+	purchase, ok := parseQiXingCai(purchaseJSON)
+	if !ok {
+		return 0, "未中奖", 0
+	}
+	draw, ok := parseQiXingCai(drawJSON)
+	if !ok {
+		return 0, "未中奖", 0
+	}
+	// 前 6 位按位相同个数（号码不足 6 位时按实际位数比）
+	k := 0
+	for i := 0; i < 6 && i < len(purchase) && i < len(draw); i++ {
+		if purchase[i] == draw[i] {
+			k++
+		}
+	}
+	if len(purchase) < 6 || len(draw) < 6 {
+		return 0, "未中奖", 0
+	}
+	s := 0
+	if len(purchase) > 6 && len(draw) > 6 && purchase[6] == draw[6] {
+		s = 1
+	}
+
+	m := float64(multiple)
+	switch {
+	case k == 6 && s == 1:
+		return 1, "一等奖", derefOr(firstAmount, qxcFirstFallback) * m
+	case k == 6:
+		return 2, "二等奖", derefOr(secondAmount, qxcSecondFallback) * m
+	case k == 5 && s == 1:
+		return 3, "三等奖", qxcThirdPrize * m
+	case k == 5 || (k == 4 && s == 1):
+		return 4, "四等奖", qxcFourthPrize * m
+	case k == 4 || (k == 3 && s == 1):
+		return 5, "五等奖", qxcFifthPrize * m
+	case s == 1:
+		return 6, "六等奖", qxcSixthPrize * m
+	}
+	return 0, "未中奖", 0
+}
+
+func derefOr(p *float64, def float64) float64 {
+	if p != nil && *p > 0 {
+		return *p
+	}
+	return def
+}
+
+// parseQiXingCai 七星彩号码解析：{red:[6],blue:[1]} 或裸 7 位数组
+func parseQiXingCai(numbersJSON string) ([]int, bool) {
+	var obj QiXingCaiNumbers
+	if err := json.Unmarshal([]byte(numbersJSON), &obj); err == nil && len(obj.Red) > 0 {
+		out := append([]int{}, obj.Red...)
+		if len(obj.Blue) > 0 {
+			out = append(out, obj.Blue[0])
+		} else {
+			out = append(out, -1) // 缺特别号：永不命中
+		}
+		return out, true
+	}
+	var arr []int
+	if err := json.Unmarshal([]byte(numbersJSON), &arr); err == nil && len(arr) > 0 {
+		return arr, true
+	}
+	return nil, false
 }

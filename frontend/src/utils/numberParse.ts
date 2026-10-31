@@ -1,6 +1,6 @@
 // 号码文本批量解析：把一行一注的文本解析为与 NumberInput/DigitNumberInput
 // 产出格式一致的 numbers JSON（小红球 {red,blue} / 大乐透 {front,back} /
-// 七乐彩 {main,special} / 数字型 {numbers} / 七星彩 裸数组）。
+// 七乐彩 {main,special} / 数字型 {numbers} / 七星彩 {red,blue}）。
 import type { LotteryType } from '../types'
 import { LOTTERY_CONFIGS } from '../types'
 
@@ -38,8 +38,52 @@ const isDigitLottery = (type: LotteryType) => type === '福彩3D' || type === '�
 /** 分隔符：任意空白/中英文逗号/顿号/中英文分号/制表符（竖线与 + 保留作红蓝分区用） */
 const SPLIT_RE = /[\s,，、;;]+/
 
+/** 分区/玩法前缀之外的通用分隔（供输入框自动格式化统计令牌用） */
+const ANY_SPLIT_RE = /[\s,，、;；+|]+/
+
+/** 单个号码的位数：数字型（3D/排列3/排列5/七星彩）1 位，乐透型 2 位（不足补零） */
+export const digitWidth = (type: LotteryType): number =>
+  isDigitLottery(type) || type === '七星彩' ? 1 : 2
+
+/** 号码所在区间的上限：用于输入时判断「再敲一位会不会越界」 */
+const zoneMaxOf = (type: LotteryType, inBlueZone: boolean): number => {
+  const config = LOTTERY_CONFIGS.find(c => c.type === type)
+  if (!config) return 99
+  if (!inBlueZone) return config.redRange.max
+  return (config.blueRange ?? config.redRange).max
+}
+
+/**
+ * 连写号码拆分：允许不敲空格直接连写（"010407" → 01 04 07；数字型 "123" → 1 2 3）。
+ * 位数不足/超长的令牌保持原样，交给后面的范围与个数校验报错。
+ */
+export const expandTokens = (type: LotteryType, toks: string[]): string[] => {
+  const w = digitWidth(type)
+  const out: string[] = []
+  for (const t of toks) {
+    if (t.length > w && /^\d+$/.test(t)) {
+      if (w === 1) {
+        for (const ch of t) out.push(ch)
+        continue
+      }
+      if (t.length % 2 === 0) {
+        for (let i = 0; i < t.length; i += 2) out.push(t.slice(i, i + 2))
+        continue
+      }
+    }
+    out.push(t)
+  }
+  return out
+}
+
+/** 按分隔符切词（不区分主号/蓝区），供输入框实时统计用 */
+export const tokenize = (text: string): string[] =>
+  text.split(ANY_SPLIT_RE).map(t => t.trim()).filter(t => t !== '')
+
+const hasZoneSep = (text: string) => text.includes('+') || text.includes('|') || text.includes('//')
+
 /** 一行里把红蓝分区切开：支持 "01 05 + 06"、"01 05 | 06"、"01 05 06(蓝)" */
-const splitMainBlue = (text: string): { main: string[]; blue: string[] } => {
+const splitMainBlue = (type: LotteryType, text: string): { main: string[]; blue: string[] } => {
   let mainPart = text
   let bluePart = ''
   if (text.includes('+')) {
@@ -55,7 +99,7 @@ const splitMainBlue = (text: string): { main: string[]; blue: string[] } => {
     mainPart = text.slice(0, idx)
     bluePart = text.slice(idx + 2)
   }
-  const toks = (s: string) => s.split(SPLIT_RE).map(t => t.trim()).filter(t => t !== '')
+  const toks = (s: string) => expandTokens(type, s.split(SPLIT_RE).map(t => t.trim()).filter(t => t !== ''))
   return { main: toks(mainPart), blue: toks(bluePart) }
 }
 
@@ -73,9 +117,29 @@ const parseLottoLine = (type: LotteryType, text: string): { numbers?: string; be
   const config = LOTTERY_CONFIGS.find(c => c.type === type)
   if (!config) return { betCount: 0, error: '未知彩种' }
 
-  const { main: mainToks, blue: blueToks } = splitMainBlue(text)
+  const { main: mainToks, blue: blueToks } = splitMainBlue(type, text)
   if (mainToks.length === 0) return { betCount: 0, error: '没有号码' }
 
+  // 未写 + 分隔时的隐式分区：双色球/大乐透按「主号个数 + 蓝区个数」切分，
+  // 如双色球 "01 04 07 10 13 16 01" → 主号 6 个 + 蓝区 1 个（红蓝同号不再误报重复）。
+  // 仅当尾部令牌都落在蓝区范围内才切，避免把「忘了写 + 的复式主号」误判成蓝号。
+  if (!hasZoneSep(text) && config.blueRange && mainToks.length === config.redRange.count + config.blueRange.count) {
+    const tail = mainToks.slice(config.redRange.count)
+    const bMin = config.blueRange.min
+    const bMax = config.blueRange.max
+    const tailFitsBlue = tail.every(t => {
+      const n = toNum(t)
+      return n !== null && n >= bMin && n <= bMax
+    })
+    if (tailFitsBlue) return parseLottoZones(type, mainToks.slice(0, config.redRange.count), tail)
+  }
+  return parseLottoZones(type, mainToks, blueToks)
+}
+
+/** 主号区 + 蓝区两组令牌的实际校验（分区已切好） */
+const parseLottoZones = (type: LotteryType, mainToks: string[], blueToks: string[]): { numbers?: string; betCount: number; error?: string } => {
+  const config = LOTTERY_CONFIGS.find(c => c.type === type)!
+  if (mainToks.length === 0) return { betCount: 0, error: '没有号码' }
   const main: number[] = []
   for (const tok of mainToks) {
     const n = toNum(tok)
@@ -148,14 +212,14 @@ const parseLottoLine = (type: LotteryType, text: string): { numbers?: string; be
   return { numbers, betCount: mainComb * blueComb }
 }
 
-/** 七星彩：6+1，号码 0-9 允许重复，存裸数组 [a,b,c,d,e,f,蓝] */
+/** 七星彩：6+1，号码 0-9 允许重复，存 {red, blue}（与手工录入、随机选号口径一致） */
 const parseQiXingCaiLine = (text: string): { numbers?: string; betCount: number; error?: string } => {
-  const { main, blue } = splitMainBlue(text)
+  const { main, blue } = splitMainBlue('七星彩', text)
   if (main.length === 0) return { betCount: 0, error: '没有号码' }
 
   // 无 + 分隔的 7 个数字：最后一个视为蓝号
   if (blue.length === 0 && main.length === 7) {
-    return { numbers: JSON.stringify(main.map(toNum)), betCount: 1 }
+    blue.push(main.pop()!)
   }
   if (blue.length === 0) {
     return { betCount: 0, error: '七星彩需要 6 个主号 + 1 个蓝号，可用 + 分隔' }
@@ -170,7 +234,7 @@ const parseQiXingCaiLine = (text: string): { numbers?: string; betCount: number;
   if (nums.length !== 6) return { betCount: 0, error: `前 6 位需要 6 个数字，当前 ${nums.length} 个` }
   const b = toNum(blue[0])
   if (b === null || b > 9) return { betCount: 0, error: `蓝区号码 "${blue[0]}" 无效（0-9）` }
-  return { numbers: JSON.stringify([...nums, b]), betCount: 1 }
+  return { numbers: JSON.stringify({ red: nums, blue: [b] }), betCount: 1 }
 }
 
 /** 数字型（福彩3D/排列3/排列5）单行解析 */
@@ -185,7 +249,7 @@ const parseDigitLine = (type: LotteryType, text: string): { numbers?: string; be
     body = text.slice(m[0].length)
   }
 
-  const toks = body.split(SPLIT_RE).map(t => t.trim()).filter(t => t !== '')
+  const toks = expandTokens(type, body.split(SPLIT_RE).map(t => t.trim()).filter(t => t !== ''))
   if (toks.length === 0) return { betCount: 0, error: '没有号码' }
 
   const nums: number[] = []
@@ -252,12 +316,74 @@ export const parseNumberLines = (type: LotteryType, text: string): ParseResult =
 /** 复式判定：任一成功行注数 > 1 */
 export const hasFushi = (lines: ParsedLine[]): boolean => lines.some(l => l.numbers && l.betCount > 1)
 
+/** 单注满注的令牌数（主号 + 蓝区），用于批量录入的自动空格/自动换行判断 */
+export const lineTokenCount = (type: LotteryType): number => {
+  const config = LOTTERY_CONFIGS.find(c => c.type === type)
+  if (!config) return 0
+  if (type === '七星彩') return 7
+  return config.redRange.count + (config.blueRange?.count ?? 0)
+}
+
+/** 一行是否已构成一注合法号码（自动换行的判据） */
+export const lineIsComplete = (type: LotteryType, line: string): boolean => {
+  const trimmed = line.trim()
+  if (trimmed === '') return false
+  const r = parseNumberLines(type, trimmed)
+  return r.lines.length === 1 && !r.lines[0].error
+}
+
+/**
+ * 批量录入文本域的自动格式化：在行尾刚敲完一个完整号码时，
+ * 自动补一个空格（该行已成一整注时自动补换行），省去手工敲空格/回车。
+ * 返回 null 表示无需改动；否则返回新文本与新光标位置。
+ */
+export const autoFormatCaret = (
+  type: LotteryType,
+  value: string,
+  caret: number,
+  opts: { autoSpace: boolean; autoNewline: boolean }
+): { value: string; caret: number } | null => {
+  if (!opts.autoSpace && !opts.autoNewline) return null
+  const before = value.slice(0, caret)
+  // 只在「刚敲了一个数字」时处理
+  if (!/\d$/.test(before)) return null
+  // 只处理行尾输入：光标后面还有本行内容（行中编辑/粘贴）时不自动插分隔，避免拆行
+  if (!/^(\n|$)/.test(value.slice(caret))) return null
+  const lineStart = before.lastIndexOf('\n') + 1
+  const line = before.slice(lineStart)
+  const m = line.match(/(\d+)$/)
+  if (!m) return null
+  const tok = m[1]
+  const w = digitWidth(type)
+  let closed = tok.length >= w
+  if (!closed && w === 2 && tok.length === 1) {
+    // 两位数彩种：若本数字已不可能与下一位拼成合法号码（如双色球敲 4 后必超 33），提前收口。
+    // 收口与否按当前所在区（+ 之后算蓝区）的上限判断。
+    const n = parseInt(tok, 10)
+    const config = LOTTERY_CONFIGS.find(c => c.type === type)
+    if (config) {
+      const head = tokenize(line.slice(0, line.length - tok.length)).filter(t => /^\d+$/.test(t))
+      const inBlue = (line.includes('+') || line.includes('|') || line.includes('//')) && head.length >= config.redRange.count
+      closed = n * 10 > zoneMaxOf(type, inBlue)
+    }
+  }
+  if (!closed) return null
+  // 注满 → 换行；否则 → 空格。换行只在开启自动换行且该行已构成完整一注时发生，
+  // 复式（超出一注的号码数）在缺蓝区前不会判满，凑满合法组合会判满——复式用户可关自动换行。
+  const newline = opts.autoNewline && lineIsComplete(type, line)
+  const sep = newline ? '\n' : ' '
+  if (!newline && !opts.autoSpace) return null
+  if (value[caret] === sep) return null // 用户已自己敲了同样的分隔
+  const nv = value.slice(0, caret) + sep + value.slice(caret)
+  return { value: nv, caret: caret + sep.length }
+}
+
 /** 生成给用户的格式说明 */
 export const formatHint = (type: LotteryType): string => {
   const config = LOTTERY_CONFIGS.find(c => c.type === type)
   if (!config) return ''
-  if (type === '七星彩') return '每行一注：6 个数字 + 蓝号，如 1 2 3 4 5 6 + 7'
+  if (type === '七星彩') return '每行一注：前 6 位数字 + 特别号，如 1 2 3 4 5 6 + 7'
   if (isDigitLottery(type)) return `每行一注：${config.redRange.count} 个数字，如 ${Array.from({ length: config.redRange.count }, (_, i) => i).join(' ')}；组选在行首写 组选6 / 组选3`
   const sep = type === '七乐彩' ? '特别号' : '蓝区'
-  return `每行一注：主号 + ${sep}，主号用空格分隔，蓝区用 + 分隔，如 ${Array.from({ length: config.redRange.count }, (_, i) => pad2(config.redRange.min + i * 3)).join(' ')} + ${pad2(config.blueRange?.min ?? 1)}`
+  return `每行一注：主号 + ${sep}，号码用空格分隔（可不敲空格连写），${sep}用 + 分隔或直接跟在主号后，如 ${Array.from({ length: config.redRange.count }, (_, i) => pad2(config.redRange.min + i * 3)).join(' ')} + ${pad2(config.blueRange?.min ?? 1)}`
 }
